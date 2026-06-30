@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\Client\TransfertController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -28,17 +29,23 @@ Route::post('/login', [AuthController::class, 'login']);
 // ROUTES PROTEGEES (Nécessitent un Token Sanctum valide)
 // ========================================================
 Route::middleware('auth:sanctum')->group(function () {
-    // Route de test par défaut pour récupérer le profil de l'utilisateur connecté
+    // Route pour récupérer le profil de l'utilisateur connecté
     Route::get('/user', function (Request $request) {
         return $request->user();
     });
 
-    // Route pour les transferts d'argent entre clients
+    /**
+     * OPERATIONS CLIENT
+     */
+    // Route pour les transferts d'argent entre clients(initier)
+    Route::post('/client/transfert/initier', [TransfertController::class, 'initierTransfert']);
 
+    // Route pour les transferts d'argent entre clients(confirmer)
+    Route::post('/client/transfert/confirmer', [TransfertController::class, 'confirmerTransfert']);
 
-    // Routes pour la consultations des points de fidélité
-
-
+    /**
+     * OPERATIONS GUICHET
+     */
     // Routes pour les opérations de dépôt de l'administration
     Route::post('/admin/depot', [\App\Http\Controllers\Admin\OperationGuichetController::class, 'depot']);
 
@@ -47,4 +54,31 @@ Route::middleware('auth:sanctum')->group(function () {
 
     //Routes pour les opérations de retrait de l'administration(confirmation)
     Route::post('/admin/retrait/confirmer', [\App\Http\Controllers\Admin\OperationGuichetController::class, 'confirmerRetrait']);
+
+    /**
+     * OPERATIONS TRANSACTIONS
+     */
+    //Routes pour récupérer l'historique des transactions
+    Route::get('/client/transactions', [\App\Http\Controllers\Client\TransactionController::class, 'index']);
+
+    //Routes pour récupérer le détail d'une seule transaction
+    Route::get('/client/transactions/{reference}', [\App\Http\Controllers\Client\TransactionController::class, 'show']);
+
+    /**
+     * OPERATIONS FIDELITE
+     */
+    // Routes pour les consultations des points de fidélité
+    Route::get('/client/fidelite/solde', [\App\Http\Controllers\Client\FideliteController::class, 'monSolde']);
+
+    // Route pour convertir les points accumulés en argent de compte
+    Route::post('/client/fidelite/convertir', [\App\Http\Controllers\Client\FideliteController::class, 'convertirPoints']);
+
+    /**
+     * OPERATIONS PROFIL CLIENT
+     */
+    // Route pour modifier le nom ou le prénom
+    Route::put('/client/profil/modifier', [\App\Http\Controllers\Client\ProfilController::class, 'mettreAJourProfil']);
+
+    // Route pour changer le code PIN
+    Route::post('/client/profil/changer-pin', [\App\Http\Controllers\Client\ProfilController::class, 'changerMdp']);
 });

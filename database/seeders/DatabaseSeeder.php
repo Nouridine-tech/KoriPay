@@ -18,8 +18,11 @@ class DatabaseSeeder extends Seeder
         // User::factory(10)->create();
 
         User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
+            'prenom' => 'Admin',
+            'nom' => 'KoriPay',
+            'telephone' => '770000000',
+            'email' => 'admin@koripay.com',
+            'role' => 'admin',
         ]);
     }
 }

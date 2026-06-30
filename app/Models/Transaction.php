@@ -15,7 +15,7 @@ class Transaction extends Model
       'montant',
       'frais',
       'type',
-      'status',
+      'statut',
     ];
 
     //RELATION INVERSE : Une transaction appartient à un utilisateur expediteur

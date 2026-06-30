@@ -92,7 +92,7 @@ class AuthController extends Controller
         }
 
         //Vérification de l'état du compte (Sécurité contre les fraude)
-        if ($user->status === 'suspendu'){
+        if ($user->statut === 'suspendu'){
             return response()->json([
                 'statut' => 'erreur',
                 'message' => 'Votre compte est suspendu. Veillez contacter le support KoriPay'

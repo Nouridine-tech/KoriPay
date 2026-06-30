@@ -8,12 +8,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class VerificationOtp extends Model
 {
     //Spécifions le nom exacte de la table car le pluriel automatique de laravel peut ne pas correspondre
-    protected $table = 'verification_otp';
+    protected $table = 'verification_otps';
 
     //Champs autorisés à être enregistrés
     protected $fillable = [
         'user_id',
-        'code',
+        'otp',
         'type_action',
         'expire_a',
         'est_utilise',

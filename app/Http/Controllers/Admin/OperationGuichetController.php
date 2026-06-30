@@ -76,8 +76,8 @@ class OperationGuichetController extends Controller
                 'destinataire_id' => $client->id,
                 'montant' => $request->montant,
                 'frais' => 0.00,
-                'type' => 'depot',
-                'status' => 'complete',
+                'type' => 'depôt',
+                'statut' => 'complete',
             ]);
 
             //Validation définitive des écritures dans PostgreSQL
@@ -159,7 +159,7 @@ class OperationGuichetController extends Controller
         // 6. Enregistrement du jeton dans la table 'verification_otps'
         VerificationOtp::create([
             'user_id' => $client->id,
-            'code' => $codeOtp,
+            'otp' => $codeOtp,
             'type_action' => 'transaction',
             'expire_a' => Carbon::now()->addMinutes(5),
             'est_utilise' => false,
@@ -209,7 +209,7 @@ class OperationGuichetController extends Controller
         }
         // 1. Algorithme de vérification de l'OTP en base de données
         $otpRecord = VerificationOtp::where('user_id', $client->id)
-            ->where('code', $request->code_otp)
+            ->where('otp', $request->code_otp)
             ->where('type_action', 'transaction')
             ->where('est_utilise', false)
             ->latest() //Analyse en priorité du jeton le plus récent
@@ -235,6 +235,7 @@ class OperationGuichetController extends Controller
         try {
             //Re-vérification de sécurité anti-fraude concurrente pour s'assurer que le solde est toujours disponible
             if ($client->solde < $request->montant) {
+                DB::rollBack();
                 return response()->json([
                     'statut' => 'erreur',
                     'message' => 'Solde insufissant.'
@@ -260,7 +261,7 @@ class OperationGuichetController extends Controller
                 'montant' => $request->montant,
                 'frais' => 0.00,
                 'type' => 'retrait',
-                'status' => 'complete',
+                'statut' => 'complete',
             ]);
 
             //Validation finale et écriture persistante dans PostgreSQL
