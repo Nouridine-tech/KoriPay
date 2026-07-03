@@ -11,6 +11,7 @@ use App\Notifications\CodeOtpNotification;
 use App\Notifications\FactureTransactionNotification;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Illuminate\Http\Request;
@@ -65,7 +66,7 @@ class TransfertController extends Controller
         $frais = $request->montant * 0.01;
         $totalA_Debiter = $request->montant + $frais;
 
-        // Vérification du solde de l'expediteur
+        // Vérification provisionnelle du solde de l'expediteur
         if ($expediteur->solde < $totalA_Debiter) {
             return response()->json([
                 'statut' => 'erreurs',
@@ -83,6 +84,8 @@ class TransfertController extends Controller
                 'user_id' => $expediteur->id,
                 'otp' => $codeOtp,
                 'type_action' => 'transaction',
+                'montant' => $request->montant,
+                'telephone_destinataire' => $request->telephone_destinataire,
                 'expire_a' => Carbon::now()->addMinutes(5),
                 'est_utilise' => false,
             ]);
@@ -131,23 +134,46 @@ class TransfertController extends Controller
             ], 404); // Code HTTP 404 :
         }
 
-        // Vérification de l'existence et validité de l'OTP dans PostgreSQL
-        $otpRecord = VerificationOtp::where('user_id', $expediteur->id)
-            ->where('otp', $request->codeOtp)
-            ->where('type_action', 'transaction')
-            ->where('est_utilise', false)
-            ->latest()
-            ->first();
-        if (!$otpRecord || $otpRecord->expire_a->isPast()) {
+        // Utilisation d'un verrou sur l'OTP pour bloquer le multi_clic
+       DB::beginTransaction();
+        try {
+            // Vérification de l'existence et validité de l'OTP dans PostgreSQL
+            $otpRecord = VerificationOtp::lockForUpdate()
+                ->where('user_id', $expediteur->id)
+                ->where('otp', $request->codeOtp)
+                ->where('type_action', 'transaction')
+                ->where('est_utilise', false)
+                ->latest()
+                ->first();
+            if (!$otpRecord || $otpRecord->expire_a->isPast()) {
+                DB::rollBack();
+                return response()->json([
+                    'statut' => 'erreurs',
+                    'message' => 'Code OTP incorrect ou expired.'
+                ], 400); // Code HTTP 400 :
+            }
+
+            // Verification de sécurité pour voir si quelqu'un a modifié le montant ou le numéro entre-temps
+            if ((float) $otpRecord->montant !== (float) $request->montant || $otpRecord->telephone_destinataire !== $request->telephone_destinataire) {
+                DB::rollBack();
+                return response()->json([
+                    'statut' => 'erreurs',
+                    'message' => 'Tentative de modification des données de transfert détectée.'
+                ], 400); // Code HTTP 400 :
+            }
+
+            //Consommation immédiate de l'OTP
+            $otpRecord->est_utilise = true;
+            $otpRecord->save();
+
+            DB::commit(); // Pour libérer le verrou sur l'OTP
+        } catch (\Exception $exception) {
+            DB::rollBack();
             return response()->json([
                 'statut' => 'erreurs',
-                'message' => 'Code OTP incorrect ou expired.'
-            ], 400); // Code HTTP 400 :
+                'message' => 'Erreur technique lors de la validation de sécurité.'
+            ], 500); // Code HTTP 500 :
         }
-
-        //Consommation immédiate de l'OTP
-        $otpRecord->est_utilise = true;
-        $otpRecord->save();
 
         //Calcul des frais pour la validation finale
         $frais = $request->montant * 0.01;
@@ -163,17 +189,22 @@ class TransfertController extends Controller
     {
         $totalA_Debiter = $montant + $frais;
 
-        //Double vérification de sécurité sur le solde
-        if ($expediteur->solde < $totalA_Debiter) {
-            return response()->json([
-                'statut' => 'erreurs',
-                'message' => 'Solde insuffisant.'
-            ], 400); // Code HTTP 400 :
-        }
-
-        // Encapsulation dans transaction de base de données (Atomicité)
+        // Encapsulation dans la transaction de base de données (Atomicité)
         DB::beginTransaction();
         try {
+            // Recharger les deux utilisateurs avec verrou anti-concurrence
+            $expediteur = User::lockForUpdate()->find($expediteur->id);
+            $destinataire = User::lockForUpdate()->find($destinataire->id);
+
+            // Double vérification de sécurité sur le solde
+            if ($expediteur->solde < $totalA_Debiter) {
+                DB::rollBack();
+                return response()->json([
+                    'statut' => 'erreurs',
+                    'message' => 'Solde insuffisant.'
+                ], 400); // Code HTTP 400 :
+            }
+
             // A. Débit de l'expéditeur
             $expediteur->solde -= $totalA_Debiter;
             $expediteur->save();
@@ -222,11 +253,15 @@ class TransfertController extends Controller
             DB::commit();
 
             // G. Notifications double facturation par e-mail
-            // Facture de débit pour l'expéditeur (de type transfert)
-            $expediteur->notify(new FactureTransactionNotification($transactionTransfert, 'expediteur'));
+            try {
+                // Facture de débit pour l'expéditeur (de type transfert)
+                $expediteur->notify(new FactureTransactionNotification($transactionTransfert, 'expediteur'));
 
-            // Facture de crédit pour le destinataire (de type reception)
-            $destinataire->notify(new FactureTransactionNotification($transactionReception, 'destinataire'));
+                // Facture de crédit pour le destinataire (de type reception)
+                $destinataire->notify(new FactureTransactionNotification($transactionReception, 'destinataire'));
+            } catch (\Exception $exception) {
+                Log::error('Notification échouée transaction ' . $referenceUnique . ' : ' . $exception->getMessage());
+            }
 
             return response()->json([
                 'statut' => 'success',
@@ -240,7 +275,7 @@ class TransfertController extends Controller
             ]
             ], 200); // Code HTTP 200 : OK
         } catch (\Exception $exception) {
-            // Annulation total en cas de crash technique
+            // Annulation totale en cas de crash technique
             DB::rollBack();
 
             return response()->json([

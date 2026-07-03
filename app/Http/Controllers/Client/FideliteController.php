@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Client;
 use App\Http\Controllers\Controller;
 use App\Models\Fidelite;
 use App\Models\Transaction;
-use Dotenv\Validator;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -93,7 +93,7 @@ class FideliteController extends Controller
                 'destinataire_id' => $client->id,
                 'montant' => $montantGagne,
                 'frais' => 0.00,
-                'type' => 'depot',
+                'type' => 'depôt',
                 'statut' => 'complete',
             ]);
 

@@ -16,6 +16,8 @@ return new class extends Migration
             $table->foreignId('user_id')->constrained('users');
             $table->string('otp');
             $table->enum('type_action', ['transaction', 'recuperation']);
+            $table->decimal('montant', 15, 2)->nullable();
+            $table->string('telephone_destinataire')->nullable();
             $table->dateTime('expire_a');
             $table->boolean('est_utilise')->default(false);
             $table->timestamps();

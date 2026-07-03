@@ -15,6 +15,8 @@ class VerificationOtp extends Model
         'user_id',
         'otp',
         'type_action',
+        'montant',
+        'telephone_destinataire',
         'expire_a',
         'est_utilise',
     ];
