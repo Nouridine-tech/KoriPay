@@ -15,12 +15,75 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Illuminate\Http\Request;
+use OpenApi\Attributes as OA;
 
 class TransfertController extends Controller
 {
     /**
      * ETAPE 1 : INITIATIER UN TRANSFERT (Avec ou sans OTP selon le montant)
      */
+
+    #[OA\Post(
+        path: "/client/transfert/initier",
+        operationId: "clientInitierTransfert",
+        summary: "Étape 1 : Initialiser un transfert de fonds",
+        description: "Permet à un client connecté de transférer de l'argent vers un autre compte. Si le montant est inférieur ou égal à 50 000 FCFA, le transfert est immédiat. S'il dépasse 50 000 FCFA, un code OTP de confirmation est généré et envoyé par e-mail.",
+        tags: ["Module Client : Transferts"],
+        security: [["sanctum" => []]],
+        requestBody: new OA\RequestBody(
+            required: true,
+            content: new OA\JsonContent(
+                required: ["telephone_destinataire", "montant"],
+                properties: [
+                    new OA\Property(property: "telephone_destinataire", type: "string", example: "+221779876543", description: "Numéro de téléphone du bénéficiaire"),
+                    new OA\Property(property: "montant", type: "number", example: 15000, description: "Montant en FCFA à transférer")
+                ]
+            )
+        ),
+        responses: [
+            new OA\Response(
+                response: 200,
+                description: "Opération traitée avec succès (soit transfert validé, soit OTP requis selon le montant)",
+                content: new OA\JsonContent(
+                    properties: [
+                        new OA\Property(property: "statut", type: "string", example: "otp_requis"),
+                        new OA\Property(property: "message", type: "string", example: "Sécurité : Votre transfert dépasse 50 000 FCFA. Un code OTP a été envoyé sur votre e-mail.")
+                    ]
+                )
+            ),
+            new OA\Response(
+                response: 400,
+                description: "Erreur de règle métier (Solde insuffisant, envoi à soi-même ou compte destinataire suspendu)",
+                content: new OA\JsonContent(
+                    properties: [
+                        new OA\Property(property: "statut", type: "string", example: "erreurs"),
+                        new OA\Property(property: "message", type: "string", example: "Opération impossible. Vous ne pouvez pas vous envoyer d'argent à vous-même.")
+                    ]
+                )
+            ),
+            new OA\Response(
+                response: 404,
+                description: "Destinataire introuvable",
+                content: new OA\JsonContent(
+                    properties: [
+                        new OA\Property(property: "statut", type: "string", example: "erreurs"),
+                        new OA\Property(property: "message", type: "string", example: "Aucun client KoriPay trouvé avec ce numéro.")
+                    ]
+                )
+            ),
+            new OA\Response(
+                response: 422,
+                description: "Erreur de validation des champs requis",
+                content: new OA\JsonContent(
+                    properties: [
+                        new OA\Property(property: "statut", type: "string", example: "erreurs"),
+                        new OA\Property(property: "erreurs", type: "object")
+                    ]
+                )
+            )
+        ]
+    )]
+
     public function initierTransfert(Request $request)
     {
         // 1. Récupération de l'expéditeur
@@ -75,7 +138,7 @@ class TransfertController extends Controller
         }
 
         //5. Analyse du seuil de sécurité (> 50 000 FCFA)
-        if ($request->montant > 50000){
+        if ($request->montant >= 50000){
             //Génération du code OTP à 6 chiffres
             $codeOtp = (string) random_int(100000, 999999);
 
@@ -91,7 +154,7 @@ class TransfertController extends Controller
             ]);
 
             // Envoi du code OTP PAr e-mail à l'expediteur
-            $expediteur->notify(new CodeOtpNotification($codeOtp));
+            $expediteur->notify(new CodeOtpNotification($codeOtp,'transfert'));
             return response()->json([
                 'statut' => 'otp_requis',
                 'message' => 'Sécurité : Votre transfert dépasse 50 000 FCFA. Un code OTP a été envoyé sur votre e-mail.'
@@ -105,6 +168,79 @@ class TransfertController extends Controller
     /**
      * ETAPE 2 : CONFIRMER LE TRANSFERT GROS MOONTANT (aprés la saisie de l'OTP)
      */
+
+    #[OA\Post(
+        path: "/client/transfert/confirmer",
+        operationId: "clientConfirmerTransfert",
+        summary: "Étape 2 : Confirmer et exécuter le transfert gros montant",
+        description: "Permet de valider définitivement un transfert supérieur à 50 000 FCFA après la saisie du code OTP reçu par e-mail. Le système intègre un verrou anti-multi-clic et une vérification anti-fraude.",
+        tags: ["Module Client : Transferts"],
+        security: [["sanctum" => []]],
+        requestBody: new OA\RequestBody(
+            required: true,
+            content: new OA\JsonContent(
+                required: ["telephone_destinataire", "montant", "codeOtp"],
+                properties: [
+                    new OA\Property(property: "telephone_destinataire", type: "string", example: "+221779876543"),
+                    new OA\Property(property: "montant", type: "number", example: 60000),
+                    new OA\Property(property: "codeOtp", type: "string", example: "123456", description: "Code OTP reçu par e-mail (6 chiffres)")
+                ]
+            )
+        ),
+        responses: [
+            new OA\Response(
+                response: 200,
+                description: "Transfert validé et fonds transférés avec succès",
+                content: new OA\JsonContent(
+                    properties: [
+                        new OA\Property(property: "statut", type: "string", example: "success"),
+                        new OA\Property(property: "message", type: "string", example: "Transfert effectué avec succès !")
+                    ]
+                )
+            ),
+            new OA\Response(
+                response: 400,
+                description: "OTP incorrect/expiré OU tentative de falsification des données détectée",
+                content: new OA\JsonContent(
+                    properties: [
+                        new OA\Property(property: "statut", type: "string", example: "erreurs"),
+                        new OA\Property(property: "message", type: "string", example: "Code OTP incorrect ou expired.")
+                    ]
+                )
+            ),
+            new OA\Response(
+                response: 404,
+                description: "Le bénéficiaire n'existe plus en base de données",
+                content: new OA\JsonContent(
+                    properties: [
+                        new OA\Property(property: "statut", type: "string", example: "erreurs"),
+                        new OA\Property(property: "message", type: "string", example: "Destinataire introuvable.")
+                    ]
+                )
+            ),
+            new OA\Response(
+                response: 422,
+                description: "Champs requis manquants ou mal formatés",
+                content: new OA\JsonContent(
+                    properties: [
+                        new OA\Property(property: "statut", type: "string", example: "erreurs"),
+                        new OA\Property(property: "erreurs", type: "object")
+                    ]
+                )
+            ),
+            new OA\Response(
+                response: 500,
+                description: "Défaillance ou conflit lors du verrouillage de la ligne OTP",
+                content: new OA\JsonContent(
+                    properties: [
+                        new OA\Property(property: "statut", type: "string", example: "erreurs"),
+                        new OA\Property(property: "message", type: "string", example: "Erreur technique lors de la validation de sécurité.")
+                    ]
+                )
+            )
+        ]
+    )]
+
     public function confirmerTransfert(Request $request)
     {
         $expediteur = $request->user();

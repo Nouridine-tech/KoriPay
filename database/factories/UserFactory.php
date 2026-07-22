@@ -29,7 +29,7 @@ class UserFactory extends Factory
             'nom' => fake()->lastName(),
             'telephone' => fake()->unique()->numerify('7########'),
             'email' => fake()->unique()->safeEmail(),
-            'code_pin' => Hash::make('1234'),
+            'code_pin' => Hash::make('8585'),
             'solde' => 0.00,
             'role' => 'client',
             'statut' => 'actif',

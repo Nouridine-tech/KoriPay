@@ -13,12 +13,96 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Validator;
+use OpenApi\Attributes as OA;
 
 class OperationGuichetController extends Controller
 {
     /**
      * EFFECTUER UN DEPÔT D'ARGENT (Guichet Administration -> compte Client)
      */
+
+    #[OA\Post(
+        path: "/admin/depot",
+        operationId: "adminDepotFonds",
+        summary: "Effectuer un dépôt de fonds sur le compte d'un client",
+        description: "Permet à un administrateur authentifié de créditer le compte d'un client depuis la console de guichet React. Génère une écriture comptable et transmet une facture par e-mail au bénéficiaire.",
+        tags: ["Module Admin : Opérations Guichet"],
+        security: [["sanctum" => []]],
+        requestBody: new OA\RequestBody(
+            required: true,
+            content: new OA\JsonContent(
+                required: ["telephone", "montant"],
+                properties: [
+                    new OA\Property(property: "telephone", type: "string", example: "+221771234567", description: "Numéro de téléphone du client bénéficiaire"),
+                    new OA\Property(property: "montant", type: "number", example: 50000, description: "Montant en FCFA à déposer")
+                ]
+            )
+        ),
+        responses: [
+            new OA\Response(
+                response: 200,
+                description: "Dépôt effectué avec succès et solde mis à jour",
+                content: new OA\JsonContent(
+                    properties: [
+                        new OA\Property(property: "statut", type: "string", example: "success"),
+                        new OA\Property(property: "message", type: "string", example: "Dépôt effectué avec succés !"),
+                        new OA\Property(property: "donnees", type: "object", description: "Détails du reçu de dépôt généré")
+                    ]
+                )
+            ),
+            new OA\Response(
+                response: 400,
+                description: "Opération rejetée car le compte client cible est suspendu",
+                content: new OA\JsonContent(
+                    properties: [
+                        new OA\Property(property: "statut", type: "string", example: "erreur"),
+                        new OA\Property(property: "message", type: "string", example: "Impossible de créditer ce compte car il est actuellement suspendu.")
+                    ]
+                )
+            ),
+            new OA\Response(
+                response: 403,
+                description: "Action non autorisée (L'utilisateur connecté n'est pas un administrateur)",
+                content: new OA\JsonContent(
+                    properties: [
+                        new OA\Property(property: "statut", type: "string", example: "erreur"),
+                        new OA\Property(property: "message", type: "string", example: "Action non autorisée. Seul l'administrateur peut effectuer un dépôt.")
+                    ]
+                )
+            ),
+            new OA\Response(
+                response: 404,
+                description: "Aucun client KoriPay actif trouvé avec ce numéro",
+                content: new OA\JsonContent(
+                    properties: [
+                        new OA\Property(property: "statut", type: "string", example: "erreur"),
+                        new OA\Property(property: "message", type: "string", example: "Aucun client trouvé avec ce numéro de téléphone")
+                    ]
+                )
+            ),
+            new OA\Response(
+                response: 422,
+                description: "Erreur de validation (champs obligatoires manquants ou montant inférieur au minimum)",
+                content: new OA\JsonContent(
+                    properties: [
+                        new OA\Property(property: "statut", type: "string", example: "erreur"),
+                        new OA\Property(property: "erreurs", type: "object")
+                    ]
+                )
+            ),
+            new OA\Response(
+                response: 500,
+                description: "Incident technique ou crash système au cours de l'écriture en base de données",
+                content: new OA\JsonContent(
+                    properties: [
+                        new OA\Property(property: "statut", type: "string", example: "erreur"),
+                        new OA\Property(property: "message", type: "string", example: "Une erreur technique est survenue lors du dépôt.")
+                    ]
+                )
+            )
+        ]
+    )]
+
     public function depot(Request $request)
     {
         //1. Sécurité : On verifie que l'utilisateur connecté est bien l'administrateur
@@ -114,6 +198,41 @@ class OperationGuichetController extends Controller
      * RETRAIT ETAPE 1 : INITIALISATION ET ENVOI DE L'OTP PAR MAIL
      */
 
+    #[OA\Post(
+        path: "/admin/retrait/initier",
+        operationId: "adminInitierRetrait",
+        summary: "Étape 1 : Initialiser un retrait au guichet",
+        description: "Permet à l'administrateur de guichet de lancer une demande de retrait pour un client. Un code OTP à 6 chiffres est généré et envoyé par e-mail au client.",
+        tags: ["Module Admin : Opérations Guichet"],
+        security: [["sanctum" => []]],
+        requestBody: new OA\RequestBody(
+            required: true,
+            content: new OA\JsonContent(
+                required: ["telephone", "montant"],
+                properties: [
+                    new OA\Property(property: "telephone", type: "string", example: "+221771234567", description: "Téléphone du client qui retire"),
+                    new OA\Property(property: "montant", type: "number", example: 25000, description: "Montant du retrait")
+                ]
+            )
+        ),
+        responses: [
+            new OA\Response(
+                response: 200,
+                description: "Code OTP généré et envoyé par e-mail",
+                content: new OA\JsonContent(
+                    properties: [
+                        new OA\Property(property: "statut", type: "string", example: "success"),
+                        new OA\Property(property: "message", type: "string", example: "Code OTP de validation généré et envoyé par e-mail au client.")
+                    ]
+                )
+            ),
+            new OA\Response(response: 400, description: "Solde insuffisant pour effectuer le retrait"),
+            new OA\Response(response: 403, description: "Action non autorisée (Seul l'admin a accès)"),
+            new OA\Response(response: 404, description: "Aucun client trouvé avec ce numéro"),
+            new OA\Response(response: 422, description: "Erreur de validation des données fournies")
+        ]
+    )]
+
     public function initierRetrait(Request $request)
     {
         // 1. Contrôle d'accés : Seul l'administrateur de guichet initier l'action
@@ -166,7 +285,7 @@ class OperationGuichetController extends Controller
         ]);
 
         // 7. Expédition immédiate du code secret vers le mail du client
-        $client->notify(new CodeOtpNotification($codeOtp));
+        $client->notify(new CodeOtpNotification($codeOtp, 'retrait'));
         return response()->json([
             'statut' => 'success',
             'message' => 'Code OTP de validation généré et envoyé par e-mail au client.'
@@ -174,8 +293,47 @@ class OperationGuichetController extends Controller
     }
 
     /**
-     * RETRAIT ETAPE 2 : VERIFICATION DE L'OTP, DEBIT ET FACTURATION
+     * RETRAIT ETAPE 2 : VERIFICATION DE L'OTP, DEBIT ET FACTURATION (CONFIRMER RETRAIT)
      */
+
+    #[OA\Post(
+        path: "/admin/retrait/confirmer",
+        operationId: "adminConfirmerRetrait",
+        summary: "Étape 2 : Valider et décaisser le retrait",
+        description: "Vérifie le code OTP fourni par le client. Si valide et non expiré, débite le compte du client et enregistre la transaction comptable de retrait.",
+        tags: ["Module Admin : Opérations Guichet"],
+        security: [["sanctum" => []]],
+        requestBody: new OA\RequestBody(
+            required: true,
+            content: new OA\JsonContent(
+                required: ["telephone", "montant", "code_otp"],
+                properties: [
+                    new OA\Property(property: "telephone", type: "string", example: "+221771234567"),
+                    new OA\Property(property: "montant", type: "number", example: 25000),
+                    new OA\Property(property: "code_otp", type: "string", example: "123456", description: "Le code reçu par le client")
+                ]
+            )
+        ),
+        responses: [
+            new OA\Response(
+                response: 200,
+                description: "Retrait d'espèce validé avec succès",
+                content: new OA\JsonContent(
+                    properties: [
+                        new OA\Property(property: "statut", type: "string", example: "success"),
+                        new OA\Property(property: "message", type: "string", example: "Retrait d'espèce validé avec succés ! Argent remis au client."),
+                        new OA\Property(property: "donnees", type: "object")
+                    ]
+                )
+            ),
+            new OA\Response(response: 400, description: "Code OTP incorrect, déjà consommé ou expiré / Solde insuffisant"),
+            new OA\Response(response: 403, description: "Action non autorisée"),
+            new OA\Response(response: 404, description: "Client introuvable"),
+            new OA\Response(response: 422, description: "Erreur de validation"),
+            new OA\Response(response: 500, description: "Défaillance technique lors du traitement de retrait")
+        ]
+    )]
+
     public function confirmerRetrait(Request $request)
     {
         // Contrôle d'accés admin initial

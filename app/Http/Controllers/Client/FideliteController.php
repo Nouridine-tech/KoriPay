@@ -9,12 +9,56 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use OpenApi\Attributes as OA;
 
 class FideliteController extends Controller
 {
     /**
      * 1. CONSULTATION DU SOLDE DE POINTS DE FIDELITE
      */
+
+    #[OA\Get(
+        path: "/client/fidelite/solde",
+        operationId: "clientGetFideliteSolde",
+        summary: "Consulter le compteur de points de fidélité du client",
+        description: "Permet au client connecté de récupérer son solde actuel de points cumulés ainsi que l'historique de son total de gains depuis l'application mobile Flutter.",
+        tags: ["Module Client : Programme de Fidélité"],
+        security: [["sanctum" => []]],
+        responses: [
+            new OA\Response(
+                response: 200,
+                description: "Solde de points de fidélité récupéré avec succès",
+                content: new OA\JsonContent(
+                    properties: [
+                        new OA\Property(property: "statut", type: "string", example: "success"),
+                        new OA\Property(
+                            property: "donnees",
+                            type: "object",
+                            properties: [
+                                new OA\Property(property: "solde_points", type: "integer", example: 350, description: "Points actuellement disponibles pour conversion"),
+                                new OA\Property(property: "total_gains", type: "integer", example: 1200, description: "Cumul historique de tous les points gagnés")
+                            ]
+                        )
+                    ]
+                )
+            ),
+            new OA\Response(
+                response: 404,
+                description: "Espace ou compte de fidélité introuvable pour cet utilisateur",
+                content: new OA\JsonContent(
+                    properties: [
+                        new OA\Property(property: "statut", type: "string", example: "erreur"),
+                        new OA\Property(property: "message", type: "string", example: "Compte de fidélité introuvable")
+                    ]
+                )
+            ),
+            new OA\Response(
+                response: 401,
+                description: "Non authentifié (Jeton de session manquant)"
+            )
+        ]
+    )]
+
     public function monSolde(Request $request)
     {
         $client = $request->user();
@@ -41,6 +85,68 @@ class FideliteController extends Controller
     /**
      * 2. CONVERSION DES POINTS EN CREDIT MONETAIRE
      */
+
+    #[OA\Post(
+        path: "/client/fidelite/convertir",
+        operationId: "clientConvertFidelitePoints",
+        summary: "Convertir les points de fidélité accumulés en crédit monétaire",
+        description: "Permet au client de transformer un montant choisi de ses points disponibles en argent réel injecté sur son solde principal (taux de conversion : 1 point = 2 FCFA, conversion minimale de 50 points). L'opération génère une écriture comptable automatisée.",
+        tags: ["Module Client : Programme de Fidélité"],
+        security: [["sanctum" => []]],
+        requestBody: new OA\RequestBody(
+            required: true,
+            content: new OA\JsonContent(
+                required: ["points_a_convertir"],
+                properties: [
+                    new OA\Property(property: "points_a_convertir", type: "integer", example: 500, description: "Le nombre de points à convertir (minimum 50 points)")
+                ]
+            )
+        ),
+        responses: [
+            new OA\Response(
+                response: 200,
+                description: "Points convertis avec succès, solde utilisateur mis à jour",
+                content: new OA\JsonContent(
+                    properties: [
+                        new OA\Property(property: "statut", type: "string", example: "success"),
+                        new OA\Property(property: "message", type: "string", example: "Félicitations ! Vos points ont été convertis en crédit."),
+                        new OA\Property(property: "donnees", type: "object", description: "Bilan des soldes après conversion")
+                    ]
+                )
+            ),
+            new OA\Response(
+                response: 400,
+                description: "Solde de points insuffisant pour réaliser la conversion demandée",
+                content: new OA\JsonContent(
+                    properties: [
+                        new OA\Property(property: "statut", type: "string", example: "erreur"),
+                        new OA\Property(property: "message", type: "string", example: "Votre solde de point de fidélité est insuffisant pour cette opération.")
+                    ]
+                )
+            ),
+            new OA\Response(
+                response: 422,
+                description: "Erreur de validation (champs manquants ou valeur inférieure à 50)",
+                content: new OA\JsonContent(
+                    properties: [
+                        new OA\Property(property: "statut", type: "string", example: "erreur"),
+                        new OA\Property(property: "erreurs", type: "object")
+                    ]
+                )
+            ),
+            new OA\Response(
+                response: 500,
+                description: "Incident lors de l'exécution financière encapsulée",
+                content: new OA\JsonContent(
+                    properties: [
+                        new OA\Property(property: "statut", type: "string", example: "erreur"),
+                        new OA\Property(property: "message", type: "string", example: "Défaillance technique lors de la conversion des points.")
+                    ]
+                )
+            )
+        ]
+    )]
+
     public function convertirPoints(Request $request)
     {
         $client = $request->user();

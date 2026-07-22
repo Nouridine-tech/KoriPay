@@ -30,9 +30,7 @@ Route::post('/login', [AuthController::class, 'login']);
 // ========================================================
 Route::middleware('auth:sanctum')->group(function () {
     // Route pour récupérer le profil de l'utilisateur connecté
-    Route::get('/user', function (Request $request) {
-        return $request->user();
-    });
+    Route::get('/user', [\App\Http\Controllers\Client\ProfilController::class, 'voirProfil']);
 
     /**
      * OPERATIONS CLIENT
@@ -76,9 +74,11 @@ Route::middleware('auth:sanctum')->group(function () {
     /**
      * OPERATIONS PROFIL CLIENT
      */
-    // Route pour modifier le nom ou le prénom
-    Route::put('/client/profil/modifier', [\App\Http\Controllers\Client\ProfilController::class, 'mettreAJourProfil']);
 
     // Route pour changer le code PIN
     Route::post('/client/profil/changer-pin', [\App\Http\Controllers\Client\ProfilController::class, 'changerMdp']);
+
+    // Route pour la déconnexion de l'utilisateur (Client ou Admin)
+    Route::post('/logout', [AuthController::class, 'logout']);
+
 });

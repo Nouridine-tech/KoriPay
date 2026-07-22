@@ -38,7 +38,7 @@ class FactureTransactionNotification extends Notification
             ->line("Nous vous confirmons la bonne exécution de votre opération sur votre compte Kori Pay.");
 
         // Personnalisation du contenu du mail selon le type métier exact de votre schéma
-        if ($type === 'depot') {
+        if ($type === 'depôt') {
             $email->line("💰 Type d'opération : Dépôt de fonds au guichet")
                 ->line("Montant crédité : {$montant}");
         } elseif ($type === 'retrait') {

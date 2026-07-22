@@ -27,6 +27,8 @@ class User extends Authenticatable
         'solde',
         'role',
         'statut',
+        'question_secrete',
+        'response_secrete',
     ];
 
     //Masquage du code PIN et le remember_token
@@ -64,5 +66,11 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
         ];
+    }
+
+    //RELATION 1 à N : Un utilisateur peut être connecté à un ou plusieurs appareils
+    public function devices(): HasMany
+    {
+        return $this->hasMany(UserDevice::class);
     }
 }

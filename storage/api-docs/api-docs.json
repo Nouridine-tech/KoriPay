@@ -1,0 +1,1478 @@
+{
+    "openapi": "3.0.0",
+    "info": {
+        "title": "Documentation de l'API KoriPay",
+        "description": "Interface interactive pour tester les endpoints de la plateforme financière KoriPay (Projet L3 IAGE / ISI Dakar).",
+        "version": "1.0.0"
+    },
+    "servers": [
+        {
+            "url": "http://127.0.0.1:8000/api/",
+            "description": "Serveur Local de Développement"
+        }
+    ],
+    "paths": {
+        "/admin/depot": {
+            "post": {
+                "tags": [
+                    "Module Admin : Opérations Guichet"
+                ],
+                "summary": "Effectuer un dépôt de fonds sur le compte d'un client",
+                "description": "Permet à un administrateur authentifié de créditer le compte d'un client depuis la console de guichet React. Génère une écriture comptable et transmet une facture par e-mail au bénéficiaire.",
+                "operationId": "adminDepotFonds",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "telephone",
+                                    "montant"
+                                ],
+                                "properties": {
+                                    "telephone": {
+                                        "description": "Numéro de téléphone du client bénéficiaire",
+                                        "type": "string",
+                                        "example": "+221771234567"
+                                    },
+                                    "montant": {
+                                        "description": "Montant en FCFA à déposer",
+                                        "type": "number",
+                                        "example": 50000
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Dépôt effectué avec succès et solde mis à jour",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "statut": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Dépôt effectué avec succés !"
+                                        },
+                                        "donnees": {
+                                            "description": "Détails du reçu de dépôt généré",
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Opération rejetée car le compte client cible est suspendu",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "statut": {
+                                            "type": "string",
+                                            "example": "erreur"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Impossible de créditer ce compte car il est actuellement suspendu."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Action non autorisée (L'utilisateur connecté n'est pas un administrateur)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "statut": {
+                                            "type": "string",
+                                            "example": "erreur"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Action non autorisée. Seul l'administrateur peut effectuer un dépôt."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Aucun client KoriPay actif trouvé avec ce numéro",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "statut": {
+                                            "type": "string",
+                                            "example": "erreur"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Aucun client trouvé avec ce numéro de téléphone"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Erreur de validation (champs obligatoires manquants ou montant inférieur au minimum)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "statut": {
+                                            "type": "string",
+                                            "example": "erreur"
+                                        },
+                                        "erreurs": {
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Incident technique ou crash système au cours de l'écriture en base de données",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "statut": {
+                                            "type": "string",
+                                            "example": "erreur"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Une erreur technique est survenue lors du dépôt."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/admin/retrait/initier": {
+            "post": {
+                "tags": [
+                    "Module Admin : Opérations Guichet"
+                ],
+                "summary": "Étape 1 : Initialiser un retrait au guichet",
+                "description": "Permet à l'administrateur de guichet de lancer une demande de retrait pour un client. Un code OTP à 6 chiffres est généré et envoyé par e-mail au client.",
+                "operationId": "adminInitierRetrait",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "telephone",
+                                    "montant"
+                                ],
+                                "properties": {
+                                    "telephone": {
+                                        "description": "Téléphone du client qui retire",
+                                        "type": "string",
+                                        "example": "+221771234567"
+                                    },
+                                    "montant": {
+                                        "description": "Montant du retrait",
+                                        "type": "number",
+                                        "example": 25000
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Code OTP généré et envoyé par e-mail",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "statut": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Code OTP de validation généré et envoyé par e-mail au client."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Solde insuffisant pour effectuer le retrait"
+                    },
+                    "403": {
+                        "description": "Action non autorisée (Seul l'admin a accès)"
+                    },
+                    "404": {
+                        "description": "Aucun client trouvé avec ce numéro"
+                    },
+                    "422": {
+                        "description": "Erreur de validation des données fournies"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/admin/retrait/confirmer": {
+            "post": {
+                "tags": [
+                    "Module Admin : Opérations Guichet"
+                ],
+                "summary": "Étape 2 : Valider et décaisser le retrait",
+                "description": "Vérifie le code OTP fourni par le client. Si valide et non expiré, débite le compte du client et enregistre la transaction comptable de retrait.",
+                "operationId": "adminConfirmerRetrait",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "telephone",
+                                    "montant",
+                                    "code_otp"
+                                ],
+                                "properties": {
+                                    "telephone": {
+                                        "type": "string",
+                                        "example": "+221771234567"
+                                    },
+                                    "montant": {
+                                        "type": "number",
+                                        "example": 25000
+                                    },
+                                    "code_otp": {
+                                        "description": "Le code reçu par le client",
+                                        "type": "string",
+                                        "example": "123456"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Retrait d'espèce validé avec succès",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "statut": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Retrait d'espèce validé avec succés ! Argent remis au client."
+                                        },
+                                        "donnees": {
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Code OTP incorrect, déjà consommé ou expiré / Solde insuffisant"
+                    },
+                    "403": {
+                        "description": "Action non autorisée"
+                    },
+                    "404": {
+                        "description": "Client introuvable"
+                    },
+                    "422": {
+                        "description": "Erreur de validation"
+                    },
+                    "500": {
+                        "description": "Défaillance technique lors du traitement de retrait"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/inscription": {
+            "post": {
+                "tags": [
+                    "Authentification"
+                ],
+                "summary": "Inscription autonome d'un nouveau client",
+                "description": "Permet à un nouvel utilisateur de s'inscrire depuis l'application mobile Flutter. Crée automatiquement son compte utilisateur et son espace de fidélité.",
+                "operationId": "authInscription",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "prenom",
+                                    "nom",
+                                    "telephone",
+                                    "email",
+                                    "code_pin"
+                                ],
+                                "properties": {
+                                    "prenom": {
+                                        "type": "string",
+                                        "example": "Mamadou"
+                                    },
+                                    "nom": {
+                                        "type": "string",
+                                        "example": "Diallo"
+                                    },
+                                    "telephone": {
+                                        "type": "string",
+                                        "example": "+221771234567"
+                                    },
+                                    "email": {
+                                        "type": "string",
+                                        "format": "email",
+                                        "example": "mamadou.diallo@isi.sn"
+                                    },
+                                    "code_pin": {
+                                        "description": "Code PIN secret à 4 chiffres",
+                                        "type": "string",
+                                        "example": "1234"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Compte KoriPay et espace de fidélité créés avec succès",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "statut": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Félicitations, votre compte KoriPay a été créé !"
+                                        },
+                                        "token": {
+                                            "type": "string",
+                                            "example": "1|abcdefghijklmnopqrstuvwxyz..."
+                                        },
+                                        "client": {
+                                            "description": "Données du client créé",
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Erreur de validation (téléphone ou email déjà existant, champs manquants, etc.)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "statut": {
+                                            "type": "string",
+                                            "example": "erreur"
+                                        },
+                                        "erreurs": {
+                                            "description": "Détails des validations échouées",
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/login": {
+            "post": {
+                "tags": [
+                    "Authentification"
+                ],
+                "summary": "Connexion d'un utilisateur (Client ou Admin)",
+                "description": "Permet à un client (Flutter) ou à un administrateur (React) de s'authentifier avec son numéro de téléphone et son code PIN. Retourne un jeton Sanctum valide.",
+                "operationId": "authLogin",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "telephone",
+                                    "code_pin"
+                                ],
+                                "properties": {
+                                    "telephone": {
+                                        "type": "string",
+                                        "example": "+221771234567"
+                                    },
+                                    "code_pin": {
+                                        "description": "Code PIN secret",
+                                        "type": "string",
+                                        "example": "1234"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Connexion réussie, nouveau jeton de session généré",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "statut": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Connexion réussi avec succés."
+                                        },
+                                        "token": {
+                                            "type": "string",
+                                            "example": "2|bcaedfghijklmnopqrstuvwxyz..."
+                                        },
+                                        "user": {
+                                            "description": "Données de l'utilisateur connecté",
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Identifiants incorrects (Téléphone ou code PIN erroné)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "statut": {
+                                            "type": "string",
+                                            "example": "erreur"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Numero ou code PIN incorrect."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Accès interdit (Compte suspendu par le système)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "statut": {
+                                            "type": "string",
+                                            "example": "erreur"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Votre compte est suspendu. Veillez contacter le support KoriPay"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Erreur de validation (champs manquants)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "statut": {
+                                            "type": "string",
+                                            "example": "erreur"
+                                        },
+                                        "erreurs": {
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/logout": {
+            "post": {
+                "tags": [
+                    "Authentification"
+                ],
+                "summary": "Déconnexion de l'utilisateur connecté",
+                "description": "Révoque et supprime définitivement le jeton d'accès (Token Sanctum) actuellement utilisé pour cette session.",
+                "operationId": "authLogout",
+                "responses": {
+                    "200": {
+                        "description": "Déconnexion réussie et jeton révoqué",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "statut": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Déconnexion réussie. Jeton révoqué avec succès."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Non authentifié (Token manquant, expiré ou invalide)"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/client/fidelite/solde": {
+            "get": {
+                "tags": [
+                    "Module Client : Programme de Fidélité"
+                ],
+                "summary": "Consulter le compteur de points de fidélité du client",
+                "description": "Permet au client connecté de récupérer son solde actuel de points cumulés ainsi que l'historique de son total de gains depuis l'application mobile Flutter.",
+                "operationId": "clientGetFideliteSolde",
+                "responses": {
+                    "200": {
+                        "description": "Solde de points de fidélité récupéré avec succès",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "statut": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "donnees": {
+                                            "properties": {
+                                                "solde_points": {
+                                                    "description": "Points actuellement disponibles pour conversion",
+                                                    "type": "integer",
+                                                    "example": 350
+                                                },
+                                                "total_gains": {
+                                                    "description": "Cumul historique de tous les points gagnés",
+                                                    "type": "integer",
+                                                    "example": 1200
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Espace ou compte de fidélité introuvable pour cet utilisateur",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "statut": {
+                                            "type": "string",
+                                            "example": "erreur"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Compte de fidélité introuvable"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Non authentifié (Jeton de session manquant)"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/client/fidelite/convertir": {
+            "post": {
+                "tags": [
+                    "Module Client : Programme de Fidélité"
+                ],
+                "summary": "Convertir les points de fidélité accumulés en crédit monétaire",
+                "description": "Permet au client de transformer un montant choisi de ses points disponibles en argent réel injecté sur son solde principal (taux de conversion : 1 point = 2 FCFA, conversion minimale de 50 points). L'opération génère une écriture comptable automatisée.",
+                "operationId": "clientConvertFidelitePoints",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "points_a_convertir"
+                                ],
+                                "properties": {
+                                    "points_a_convertir": {
+                                        "description": "Le nombre de points à convertir (minimum 50 points)",
+                                        "type": "integer",
+                                        "example": 500
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Points convertis avec succès, solde utilisateur mis à jour",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "statut": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Félicitations ! Vos points ont été convertis en crédit."
+                                        },
+                                        "donnees": {
+                                            "description": "Bilan des soldes après conversion",
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Solde de points insuffisant pour réaliser la conversion demandée",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "statut": {
+                                            "type": "string",
+                                            "example": "erreur"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Votre solde de point de fidélité est insuffisant pour cette opération."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Erreur de validation (champs manquants ou valeur inférieure à 50)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "statut": {
+                                            "type": "string",
+                                            "example": "erreur"
+                                        },
+                                        "erreurs": {
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Incident lors de l'exécution financière encapsulée",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "statut": {
+                                            "type": "string",
+                                            "example": "erreur"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Défaillance technique lors de la conversion des points."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/user": {
+            "get": {
+                "tags": [
+                    "Module Client : Profil et Sécurité"
+                ],
+                "summary": "Consulter le profil et le solde en temps réel",
+                "description": "Permet de récupérer les informations personnelles et le solde actualisé de l'utilisateur connecté grâce à son jeton de session.",
+                "operationId": "clientVoirProfil",
+                "responses": {
+                    "200": {
+                        "description": "Profil chargé avec succès",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "statut": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "donnees": {
+                                            "properties": {
+                                                "id": {
+                                                    "type": "integer",
+                                                    "example": 1
+                                                },
+                                                "nom": {
+                                                    "type": "string",
+                                                    "example": "Ndiaye"
+                                                },
+                                                "prenom": {
+                                                    "type": "string",
+                                                    "example": "Awa"
+                                                },
+                                                "email": {
+                                                    "type": "string",
+                                                    "example": "awa.ndiaye@isi.sn"
+                                                },
+                                                "telephone": {
+                                                    "type": "string",
+                                                    "example": "+221771234567"
+                                                },
+                                                "solde_actuel": {
+                                                    "type": "number",
+                                                    "example": 15000
+                                                },
+                                                "cree_le": {
+                                                    "type": "string",
+                                                    "example": "08/07/2026"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Non authentifié (Jeton invalide ou absent)"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/client/profil/modifier": {
+            "put": {
+                "tags": [
+                    "Module Client : Profil et Sécurité"
+                ],
+                "summary": "Mettre à jour les informations de base du profil client",
+                "description": "Permet au client connecté de modifier son nom et son prénom depuis l'application mobile Flutter.",
+                "operationId": "clientMettreAJourProfil",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "nom",
+                                    "prenom"
+                                ],
+                                "properties": {
+                                    "nom": {
+                                        "description": "Nouveau nom du client",
+                                        "type": "string",
+                                        "example": "Ndiaye"
+                                    },
+                                    "prenom": {
+                                        "description": "Nouveau prénom du client",
+                                        "type": "string",
+                                        "example": "Awa"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Profil mis à jour avec succès",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "statut": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Votre profil a été mis à jour avec succès."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Erreur de validation (champs manquants ou trop longs)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "statut": {
+                                            "type": "string",
+                                            "example": "erreur"
+                                        },
+                                        "erreurs": {
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Non authentifié (Jeton absent ou expiré)"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/client/profil/changer-pin": {
+            "post": {
+                "tags": [
+                    "Module Client : Profil et Sécurité"
+                ],
+                "summary": "Modifier le code PIN / mot de passe du client",
+                "description": "Permet au client connecté de modifier son code PIN de sécurité à 4 chiffres. Le système exige la validation de l'ancien code PIN et une confirmation du nouveau code pour éviter les erreurs de saisie.",
+                "operationId": "clientChangerCodePin",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "ancien_mot_de_passe",
+                                    "nouveau_mot_de_passe",
+                                    "nouveau_mot_de_passe_confirmation"
+                                ],
+                                "properties": {
+                                    "ancien_mot_de_passe": {
+                                        "description": "Le code PIN actuel de l'utilisateur",
+                                        "type": "string",
+                                        "example": "1234"
+                                    },
+                                    "nouveau_mot_de_passe": {
+                                        "description": "Le nouveau code PIN (minimum 4 caractères/chiffres)",
+                                        "type": "string",
+                                        "example": "4321"
+                                    },
+                                    "nouveau_mot_de_passe_confirmation": {
+                                        "description": "Confirmation stricte du nouveau code PIN",
+                                        "type": "string",
+                                        "example": "4321"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Code PIN mis à jour avec succès",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "statut": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Votre mot de passe a été modifié avec succès."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "L'ancien code PIN fourni est incorrect",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "statut": {
+                                            "type": "string",
+                                            "example": "erreur"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "L'ancien mot de passe saisie est incorrect."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Erreur de validation (champs manquants, trop courts ou non concordants)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "statut": {
+                                            "type": "string",
+                                            "example": "erreur"
+                                        },
+                                        "erreurs": {
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Non authentifié (Session expirée)"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/client/transactions": {
+            "get": {
+                "tags": [
+                    "Module Client : Transactions"
+                ],
+                "summary": "Récupérer l'historique complet des transactions du client",
+                "description": "Retourne la liste complète et paginée (par paquets de 15) de toutes les opérations (dépôts, retraits, transferts envoyés et reçus) rattachées au compte du client connecté.",
+                "operationId": "clientListTransactions",
+                "responses": {
+                    "200": {
+                        "description": "Historique récupéré avec succès (Données enveloppées dans une structure de pagination native)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "statut": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "donnees": {
+                                            "description": "Objet contenant la liste des transactions et les métadonnées de pagination (current_page, data, total...)",
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Non authentifié (Jeton manquant ou expiré)"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/client/transactions/{reference}": {
+            "get": {
+                "tags": [
+                    "Module Client : Transactions"
+                ],
+                "summary": "Récupérer le détail d'une transaction spécifique",
+                "description": "Permet de charger les détails complets d'une opération financière à partir de sa référence unique globale, à condition que le client connecté en soit l'expéditeur ou le destinataire (sécurité IDOR).",
+                "operationId": "clientShowTransaction",
+                "parameters": [
+                    {
+                        "name": "reference",
+                        "in": "path",
+                        "description": "La référence de la transaction (Ex: KP-TX-XXXXXXXXXX)",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Détails de la transaction chargés avec succès",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "statut": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "donnees": {
+                                            "description": "Enregistrement complet de la transaction",
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Transaction introuvable ou accès non autorisé pour ce compte",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "statut": {
+                                            "type": "string",
+                                            "example": "erreur"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Transaction introuvable ou vous n'avez pas l'autorisation d'y accéder."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Non authentifié (Jeton invalide)"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/client/transfert/initier": {
+            "post": {
+                "tags": [
+                    "Module Client : Transferts"
+                ],
+                "summary": "Étape 1 : Initialiser un transfert de fonds",
+                "description": "Permet à un client connecté de transférer de l'argent vers un autre compte. Si le montant est inférieur ou égal à 50 000 FCFA, le transfert est immédiat. S'il dépasse 50 000 FCFA, un code OTP de confirmation est généré et envoyé par e-mail.",
+                "operationId": "clientInitierTransfert",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "telephone_destinataire",
+                                    "montant"
+                                ],
+                                "properties": {
+                                    "telephone_destinataire": {
+                                        "description": "Numéro de téléphone du bénéficiaire",
+                                        "type": "string",
+                                        "example": "+221779876543"
+                                    },
+                                    "montant": {
+                                        "description": "Montant en FCFA à transférer",
+                                        "type": "number",
+                                        "example": 15000
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Opération traitée avec succès (soit transfert validé, soit OTP requis selon le montant)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "statut": {
+                                            "type": "string",
+                                            "example": "otp_requis"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Sécurité : Votre transfert dépasse 50 000 FCFA. Un code OTP a été envoyé sur votre e-mail."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Erreur de règle métier (Solde insuffisant, envoi à soi-même ou compte destinataire suspendu)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "statut": {
+                                            "type": "string",
+                                            "example": "erreurs"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Opération impossible. Vous ne pouvez pas vous envoyer d'argent à vous-même."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Destinataire introuvable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "statut": {
+                                            "type": "string",
+                                            "example": "erreurs"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Aucun client KoriPay trouvé avec ce numéro."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Erreur de validation des champs requis",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "statut": {
+                                            "type": "string",
+                                            "example": "erreurs"
+                                        },
+                                        "erreurs": {
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/client/transfert/confirmer": {
+            "post": {
+                "tags": [
+                    "Module Client : Transferts"
+                ],
+                "summary": "Étape 2 : Confirmer et exécuter le transfert gros montant",
+                "description": "Permet de valider définitivement un transfert supérieur à 50 000 FCFA après la saisie du code OTP reçu par e-mail. Le système intègre un verrou anti-multi-clic et une vérification anti-fraude.",
+                "operationId": "clientConfirmerTransfert",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "telephone_destinataire",
+                                    "montant",
+                                    "codeOtp"
+                                ],
+                                "properties": {
+                                    "telephone_destinataire": {
+                                        "type": "string",
+                                        "example": "+221779876543"
+                                    },
+                                    "montant": {
+                                        "type": "number",
+                                        "example": 60000
+                                    },
+                                    "codeOtp": {
+                                        "description": "Code OTP reçu par e-mail (6 chiffres)",
+                                        "type": "string",
+                                        "example": "123456"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Transfert validé et fonds transférés avec succès",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "statut": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Transfert effectué avec succès !"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "OTP incorrect/expiré OU tentative de falsification des données détectée",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "statut": {
+                                            "type": "string",
+                                            "example": "erreurs"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Code OTP incorrect ou expired."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Le bénéficiaire n'existe plus en base de données",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "statut": {
+                                            "type": "string",
+                                            "example": "erreurs"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Destinataire introuvable."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Champs requis manquants ou mal formatés",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "statut": {
+                                            "type": "string",
+                                            "example": "erreurs"
+                                        },
+                                        "erreurs": {
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Défaillance ou conflit lors du verrouillage de la ligne OTP",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "statut": {
+                                            "type": "string",
+                                            "example": "erreurs"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Erreur technique lors de la validation de sécurité."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        }
+    },
+    "components": {
+        "securitySchemes": {
+            "sanctum": {
+                "type": "http",
+                "description": "Entrez votre jeton de sécurité (Token Sanctum) reçu lors du Login pour tester les routes protégées.",
+                "bearerFormat": "JWT",
+                "scheme": "bearer"
+            }
+        }
+    },
+    "tags": [
+        {
+            "name": "Module Admin : Opérations Guichet",
+            "description": "Module Admin : Opérations Guichet"
+        },
+        {
+            "name": "Authentification",
+            "description": "Authentification"
+        },
+        {
+            "name": "Module Client : Programme de Fidélité",
+            "description": "Module Client : Programme de Fidélité"
+        },
+        {
+            "name": "Module Client : Profil et Sécurité",
+            "description": "Module Client : Profil et Sécurité"
+        },
+        {
+            "name": "Module Client : Transactions",
+            "description": "Module Client : Transactions"
+        },
+        {
+            "name": "Module Client : Transferts",
+            "description": "Module Client : Transferts"
+        }
+    ]
+}

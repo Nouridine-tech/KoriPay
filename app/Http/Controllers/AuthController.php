@@ -2,17 +2,49 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Fidelite;
 use App\Models\User;
+use App\Models\Fidelite;
+use App\Models\UserDevice;
+use App\Models\VerificationOtp;
+use App\Notifications\NouvelAppareilNotification;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
+use OpenApi\Attributes as OA;
 
 class AuthController extends Controller
 {
     /**
-     * 1. INSCRIPTION AUTONOME DU CLIENT (Application Mobile Futter)
+     * 0. INSCRIPTION AUTONOME DU CLIENT (Application Mobile Futter)
      */
+
+    #[OA\Post(
+        path: "/inscription",
+        operationId: "authInscription",
+        summary: "Inscription d'un nouveau client",
+        tags: ["Authentification"],
+        requestBody: new OA\RequestBody(
+            required: true,
+            content: new OA\JsonContent(
+                required: ["prenom", "nom", "telephone", "email", "code_pin"],
+                properties: [
+                    new OA\Property(property: "prenom", type: "string", example: "Mamadou"),
+                    new OA\Property(property: "nom", type: "string", example: "Diallo"),
+                    new OA\Property(property: "telephone", type: "string", example: "+221771234567"),
+                    new OA\Property(property: "email", type: "string", format: "email", example: "mamadou.diallo@isi.sn"),
+                    new OA\Property(property: "code_pin", type: "string", example: "1234"),
+                    new OA\Property(property: "question_secrete", type: "string", example: "Votre ville natale ?", nullable: true),
+                    new OA\Property(property: "reponse_secrete", type: "string", example: "Dakar", nullable: true)
+                ]
+            )
+        ),
+        responses: [
+            new OA\Response(response: 201, description: "Compte créé avec succès"),
+            new OA\Response(response: 422, description: "Erreur de validation")
+        ]
+    )]
+
     public function inscription(Request $request)
     {
         // Validation des données entrantes pour éviter les bugs et injections
@@ -41,7 +73,10 @@ class AuthController extends Controller
             'code_pin' => Hash::make($request->code_pin),
             'solde' => 0.00,
             'role' => 'client',
-            'statut' => 'actif'
+            'statut' => 'actif',
+            // Champs de sécurité facultatifs dès l'inscription pour la reinitialisation
+            'question_secrete' => $request->question_secrete ?? null,
+            'response_secrete' => $request->response_secrete ? Hash::make(strtolower($request->response_secrete)) : null,
         ]);
 
         //Création automatique de son compte Fidélité associé
@@ -62,15 +97,100 @@ class AuthController extends Controller
             'client' => $user,
         ], 201); //Code HTTP 201 : Ressource créée avec succès
     }
+
     /**
-     * 2. CONNEXION DU CLIENT OU DE L'ADMIN (Téléphone + Code PIN)
+     * 1. VERIFICATION CROISEE COMPTE / APPAREIL (Au démarrage de flutter)
      */
+    #[OA\Post(
+        path: "/auth/verifier-appareil",
+        operationId: "authCheckDeviceUserMatch",
+        summary: "Étape 0 : Vérifier la liaison entre le numéro et cet appareil",
+        tags: ["Authentification"],
+        requestBody: new OA\RequestBody(
+            required: true,
+            content: new OA\JsonContent(
+                required: ["telephone", "device_id"],
+                properties: [
+                    new OA\Property(property: "telephone", type: "string", example: "771111111"),
+                    new OA\Property(property: "device_id", type: "string", example: "f7b129a0-c3bc")
+                ]
+            )
+        ),
+        responses: [
+            new OA\Response(response: 200, description: "Appareil déjà lié, afficher écran PIN normal"),
+            new OA\Response(response: 202, description: "Nouvel appareil détecté, rediriger vers authentification forte"),
+            new OA\Response(response: 404, description: "Numéro de téléphone inconnu")
+        ]
+    )]
+
+    public function verifierEmpreinteAppareil(Request $request)
+    {
+        $request->validate([
+            'telephone' => 'required|string',
+            'device_id' => 'required|string',
+        ]);
+
+        //1. On cherche d'abord si le client existe dans la BD
+        $user = User::where('telephone', $request->telephone)->first();
+
+        if (!$user) {
+            return response()->json([
+                'statut' => 'erreur',
+                'message' => 'Aucun compte KoriPay trouvé avec ce numéro de téléphone.'
+            ], 404); //Code HTTP 404: Not Found
+        }
+
+        //2. LOGIQUE LOGICIELLE : On vérifie si cet appareil est enregistré pour ce compte précis
+        $liaisonExiste = $user->devices()->where('device_id', $request->device_id)->exists();
+
+        // LOGIQUE SI NOUVELLE APPAREIL : On bloque le passage immédiat
+        if (!$liaisonExiste) {
+            return response()->json([
+                'statut' => 'nouvelle_appareil',
+                'message' => 'Appareil inconnu pour ce compte. Redirection automatique vers l\'interface de liaison.'
+            ], 202); // Code HTTP 202 : Requête acceptée mais nécessite un traitement (Liaison fort)
+        }
+
+        // LOGIQUE SI APPAREIL CONNU : Feu vert, Flutter peut afficher la simple saisie du code PIN
+        return response()->json([
+            'statut' => 'success',
+            'message' => 'Appareil validé. Autorisation de charger l\'écran de saisie du code PIN.'
+        ], 200); //Code HTTP 200 : OK
+    }
+
+    /**
+     * 2. CONNEXION DU CLIENT OU DE L'ADMIN sur un appareil connue (Code PIN)
+     */
+
+    #[OA\Post(
+        path: "/login",
+        operationId: "authLoginNormal",
+        summary: "Connexion classique (Pour appareils validés)",
+        tags: ["Authentification"],
+        requestBody: new OA\RequestBody(
+            required: true,
+            content: new OA\JsonContent(
+                required: ["telephone", "code_pin", "device_id"],
+                properties: [
+                    new OA\Property(property: "telephone", type: "string", example: "771111111"),
+                    new OA\Property(property: "code_pin", type: "string", example: "1234"),
+                    new OA\Property(property: "device_id", type: "string", example: "f7b129a0-c3bc")
+                ]
+            )
+        ),
+        responses: [
+            new OA\Response(response: 200, description: "Connexion accordée"),
+            new OA\Response(response: 401, description: "PIN incorrect ou appareil interdit")
+        ]
+    )]
+
     public function login(Request $request)
     {
         //Validation basique des champs requis
         $validateur = Validator::make($request->all(), [
             'telephone' => ['required', 'string'],
             'code_pin' => ['required', 'string'],
+            'device_id' => ['required', 'string'],
         ]);
 
         if ($validateur->fails()) {
@@ -91,12 +211,21 @@ class AuthController extends Controller
             ], 401); //Code HTTP 401 : Non autorisé
         }
 
-        //Vérification de l'état du compte (Sécurité contre les fraude)
+        //Vérification de l'état du compte (Sécurité contre les fraudes)
         if ($user->statut === 'suspendu'){
             return response()->json([
                 'statut' => 'erreur',
                 'message' => 'Votre compte est suspendu. Veillez contacter le support KoriPay'
             ], 403); //Code HTTP 403 : Interdit
+        }
+
+        // Sécurité 2 (Anti-contournement) : On revérifie si l'appareil est bien lié à cet utilisateur
+        $liaisonValide = $user->devices()->where('device_id', $request->device_id)->exists();
+        if (!$liaisonValide) {
+            return response()->json([
+                'statut' => 'erreur',
+                'message' => 'Accès refusé. Cet appareil doit faire l\'objet d\'une double authentification.'
+            ], 401);
         }
 
         //Nettoyage : On supprime ses anciens tokens pour éviter l'accumulation
@@ -112,4 +241,183 @@ class AuthController extends Controller
             'user' => $user,
         ], 200); //Code HTTP 200: OK
     }
+
+    /**
+     * 3. - ÉTAPE 1 : ENREGISTRER UN NOUVEL APPAREIL (Vérification identité globale + Envoi OTP)
+     */
+    #[OA\Post(
+        path: "/login/nouvel-appareil/initier",
+        operationId: "authNouvelAppareilInitier",
+        summary: "Liaison Étape 1 : Vérification croisée (KYC) et envoi de l'OTP de sécurité",
+        tags: ["Authentification"],
+        requestBody: new OA\RequestBody(
+            required: true,
+            content: new OA\JsonContent(
+                required: ["telephone", "code_pin", "email"],
+                properties: [
+                    new OA\Property(property: "telephone", type: "string", example: "771111111"),
+                    new OA\Property(property: "code_pin", type: "string", example: "1234"),
+                    new OA\Property(property: "email", type: "string", example: "mamadou.diallo@isi.sn")
+                ]
+            )
+        ),
+        responses: [
+            new OA\Response(response: 200, description: "Données valides, OTP expédié par mail"),
+            new OA\Response(response: 401, description: "Informations d'identité invalides")
+        ]
+    )]
+
+    public function initierNouvelAppareil(Request $request)
+    {
+        $request->validate([
+            'telephone' => ['required', 'string'],
+            'code_pin' => ['required', 'string'],
+            'email' => ['required', 'string'],
+        ]);
+
+        // SECURITE MAXIMUM (Vérification croisée) : Pour lier l'appareil, il faut obligatoirement fournir
+        // le Téléphone ET l'E-mail associés à la ligne, en plus du bon code PIN.
+        $user = User::where('telephone', $request->telephone)
+            ->where('email', $request->email)
+            ->first();
+        if (!$user || !Hash::check($request->code_pin, $user->code_pin)) {
+            return response()->json([
+                'statut' => 'erreur',
+                'message' => 'Les informations d\'identité fournies ne correspondent pas.'
+            ], 401); //Code HTTP 401 : Entités non traitées
+        }
+
+        // Génération du code OTP secret à 6 chiffres
+        $codeOtp = (string) random_int(100000, 999999);
+
+        // Sauvegarde de l'action dans la BD
+        VerificationOtp::create([
+            'user_id' => $user->id,
+            'otp' => $codeOtp,
+            'type_action' => 'nouvel_appareil',
+            'expire_a' => Carbon::now()->addMinutes(5),
+            'est_utilise' => false
+        ]);
+
+        //Déclenchement de la toute nouvelle notification e-mail dédiée !
+        $user->notify(new NouvelAppareilNotification($codeOtp));
+
+        return response()->json([
+            'statut' => 'success',
+            'message' => 'Identité confirmée. Un code de sécurité temporaire a été envoyé sur votre e-mail.'
+        ], 200); //Code HTTP 200 : OK
+    }
+
+    /**
+     * 3. - ÉTAPE 2 : VALIDATION DE L'OTP + LIAISON ET CONNEXION FINALE
+     */
+
+    #[OA\Post(
+        path: "/login/nouvel-appareil/valider",
+        operationId: "authNouvelAppareilValider",
+        summary: "Liaison Étape 2 : Valider le code OTP et lier l'appareil",
+        tags: ["Authentification"],
+        requestBody: new OA\RequestBody(required: true,content:
+            new OA\JsonContent(required: ["telephone", "code_otp", "device_id"],
+                properties: [new OA\Property(property: "telephone", type: "string", example: "771111111"),
+                    new OA\Property(property: "code_otp", type: "string", example: "123456"),
+                    new OA\Property(property: "device_id", type: "string", example: "f7b129a0-c3bc"),
+                    new OA\Property(property: "device_name", type: "string", example: "Infinix Note 40")])),
+        responses: [new OA\Response(response: 200, description: "Appareil enregistré pour ce compte, token généré"),
+            new OA\Response(response: 401, description: "Code OTP invalide ou expiré")]
+    )]
+    public function validerNouvelAppareil(Request $request)
+    {
+        $request->validate([
+            'telephone' => ['required', 'string'],
+            'code_otp' => ['required', 'digits:6'],
+            'device_id' => ['required', 'string'],
+        ]);
+
+        $user = User::where('telephone', $request->telephone)->first();
+        if (!$user){
+            return response()->json([
+                'statut' => 'erreur',
+                'message' => 'Utilisateur introuvable'
+            ],404);// Code HTTP 404 : Not Found
+        }
+
+        // Recherche du jeton OTP en base de données
+        $otpRecord = VerificationOtp::where('user_id', $user->id)
+            ->where('otp', $request->code_otp)
+            ->where('type_action', 'nouvel_appareil')
+            ->where('est_utilise', false)
+            ->latest()->first();
+        if (!$otpRecord || $otpRecord->expire_a->isPast()) {
+            return response()->json([
+                'statut' => 'erreur',
+                'message' => 'Code OTP invalide ou expiré.'
+            ],401); //Code HTTP 401 : Entités non traitées
+        }
+
+        // On marque le code comme consommé
+        $otpRecord->update(['est_utilise' => true]);
+
+        //Action COMPTABLE Clé : On enregistre définitivement la machine pour ce compte
+        $user->devices()->create([
+            'device_id' => $request->device_id,
+            'device_name' => $request->device_name ?? 'Smartphone Client',
+            'derniere_connexion_le' => now()
+        ]);
+
+        //Nettoyage : On supprime ses anciens tokens pour éviter l'accumulation
+        $user->tokens()->delete();
+
+        // Génération du nouveau Jeton d'accés pour maintenir sa session active
+        $token = $user->createToken('kori_token_session')->plainTextToken;
+
+        return response()->json([
+            'statut' => 'success',
+            'message' => 'Connexion réussi avec succés.',
+            'token' => $token,
+            'user' => $user,
+        ], 200); //Code HTTP 200: OK
+    }
+
+    /**
+     * 3. DÉCONNEXION DE L'UTILISATEUR (Révocation du Jeton Sanctum)
+     */
+
+    #[OA\Post(
+        path: "/logout",
+        operationId: "authLogout",
+        summary: "Déconnexion de l'utilisateur connecté",
+        description: "Révoque et supprime définitivement le jeton d'accès (Token Sanctum) actuellement utilisé pour cette session.",
+        tags: ["Authentification"],
+        security: [["sanctum" => []]], // Cette ligne force l'icône de cadenas sur Swagger
+        responses: [
+            new OA\Response(
+                response: 200,
+                description: "Déconnexion réussie et jeton révoqué",
+                content: new OA\JsonContent(
+                    properties: [
+                        new OA\Property(property: "statut", type: "boolean", example: true),
+                        new OA\Property(property: "message", type: "string", example: "Déconnexion réussie. Jeton révoqué avec succès.")
+                    ]
+                )
+            ),
+            new OA\Response(
+                response: 401,
+                description: "Non authentifié (Token manquant, expiré ou invalide)"
+            )
+        ]
+    )]
+
+    public function logout(Request $request)
+    {
+        // Récupère l'utilisateur connecté grâce au jeton et supprime son token actuel
+        $request->user()->currentAccessToken()->delete();
+
+        // Retourne un message de confirmation en JSON
+        return response()->json([
+            'statut' => 'success',
+            'message' => 'Déconnexion réussie. Jeton révoqué avec succès.'
+        ], 200);
+    }
+
 }

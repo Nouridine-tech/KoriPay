@@ -3,8 +3,9 @@
 namespace Database\Seeders;
 
 use App\Models\User;
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 
 class DatabaseSeeder extends Seeder
 {
@@ -15,14 +16,15 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // User::factory(10)->create();
-
-        User::factory()->create([
-            'prenom' => 'Admin',
-            'nom' => 'KoriPay',
+        User::create([
+            'prenom'    => 'Nouridine',
+            'nom'       => 'Idrissa',
             'telephone' => '770000000',
-            'email' => 'admin@koripay.com',
-            'role' => 'admin',
+            'email'     => 'admin@koripay.com',
+            'code_pin'  => Hash::make('1234'),
+            'solde'     => 0.00,
+            'role'      => 'admin',
+            'statut'    => 'actif',
         ]);
     }
 }
