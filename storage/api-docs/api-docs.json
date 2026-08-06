@@ -12,6 +12,61 @@
         }
     ],
     "paths": {
+        "/admin/client/modifier-identite": {
+            "put": {
+                "tags": [
+                    "Module Admin : Gestion Clients"
+                ],
+                "summary": "Modifier le nom et prénom d'un client (Réservé Admin)",
+                "description": "Permet à l'administrateur de modifier l'identité d'un client après vérification physique de ses justificatifs officiels (Conformité réglementaire).",
+                "operationId": "adminModifierIdentiteClient",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "client_id",
+                                    "nom",
+                                    "prenom"
+                                ],
+                                "properties": {
+                                    "client_id": {
+                                        "type": "integer",
+                                        "example": 2
+                                    },
+                                    "nom": {
+                                        "type": "string",
+                                        "example": "Ndiaye"
+                                    },
+                                    "prenom": {
+                                        "type": "string",
+                                        "example": "Fatou"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Identité mise à jour"
+                    },
+                    "403": {
+                        "description": "Droits insuffisants"
+                    },
+                    "404": {
+                        "description": "Client introuvable"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
         "/admin/depot": {
             "post": {
                 "tags": [
@@ -338,271 +393,6 @@
                 ]
             }
         },
-        "/inscription": {
-            "post": {
-                "tags": [
-                    "Authentification"
-                ],
-                "summary": "Inscription autonome d'un nouveau client",
-                "description": "Permet à un nouvel utilisateur de s'inscrire depuis l'application mobile Flutter. Crée automatiquement son compte utilisateur et son espace de fidélité.",
-                "operationId": "authInscription",
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "required": [
-                                    "prenom",
-                                    "nom",
-                                    "telephone",
-                                    "email",
-                                    "code_pin"
-                                ],
-                                "properties": {
-                                    "prenom": {
-                                        "type": "string",
-                                        "example": "Mamadou"
-                                    },
-                                    "nom": {
-                                        "type": "string",
-                                        "example": "Diallo"
-                                    },
-                                    "telephone": {
-                                        "type": "string",
-                                        "example": "+221771234567"
-                                    },
-                                    "email": {
-                                        "type": "string",
-                                        "format": "email",
-                                        "example": "mamadou.diallo@isi.sn"
-                                    },
-                                    "code_pin": {
-                                        "description": "Code PIN secret à 4 chiffres",
-                                        "type": "string",
-                                        "example": "1234"
-                                    }
-                                },
-                                "type": "object"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "201": {
-                        "description": "Compte KoriPay et espace de fidélité créés avec succès",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "statut": {
-                                            "type": "string",
-                                            "example": "success"
-                                        },
-                                        "message": {
-                                            "type": "string",
-                                            "example": "Félicitations, votre compte KoriPay a été créé !"
-                                        },
-                                        "token": {
-                                            "type": "string",
-                                            "example": "1|abcdefghijklmnopqrstuvwxyz..."
-                                        },
-                                        "client": {
-                                            "description": "Données du client créé",
-                                            "type": "object"
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    },
-                    "422": {
-                        "description": "Erreur de validation (téléphone ou email déjà existant, champs manquants, etc.)",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "statut": {
-                                            "type": "string",
-                                            "example": "erreur"
-                                        },
-                                        "erreurs": {
-                                            "description": "Détails des validations échouées",
-                                            "type": "object"
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/login": {
-            "post": {
-                "tags": [
-                    "Authentification"
-                ],
-                "summary": "Connexion d'un utilisateur (Client ou Admin)",
-                "description": "Permet à un client (Flutter) ou à un administrateur (React) de s'authentifier avec son numéro de téléphone et son code PIN. Retourne un jeton Sanctum valide.",
-                "operationId": "authLogin",
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "required": [
-                                    "telephone",
-                                    "code_pin"
-                                ],
-                                "properties": {
-                                    "telephone": {
-                                        "type": "string",
-                                        "example": "+221771234567"
-                                    },
-                                    "code_pin": {
-                                        "description": "Code PIN secret",
-                                        "type": "string",
-                                        "example": "1234"
-                                    }
-                                },
-                                "type": "object"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "Connexion réussie, nouveau jeton de session généré",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "statut": {
-                                            "type": "string",
-                                            "example": "success"
-                                        },
-                                        "message": {
-                                            "type": "string",
-                                            "example": "Connexion réussi avec succés."
-                                        },
-                                        "token": {
-                                            "type": "string",
-                                            "example": "2|bcaedfghijklmnopqrstuvwxyz..."
-                                        },
-                                        "user": {
-                                            "description": "Données de l'utilisateur connecté",
-                                            "type": "object"
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Identifiants incorrects (Téléphone ou code PIN erroné)",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "statut": {
-                                            "type": "string",
-                                            "example": "erreur"
-                                        },
-                                        "message": {
-                                            "type": "string",
-                                            "example": "Numero ou code PIN incorrect."
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    },
-                    "403": {
-                        "description": "Accès interdit (Compte suspendu par le système)",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "statut": {
-                                            "type": "string",
-                                            "example": "erreur"
-                                        },
-                                        "message": {
-                                            "type": "string",
-                                            "example": "Votre compte est suspendu. Veillez contacter le support KoriPay"
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    },
-                    "422": {
-                        "description": "Erreur de validation (champs manquants)",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "statut": {
-                                            "type": "string",
-                                            "example": "erreur"
-                                        },
-                                        "erreurs": {
-                                            "type": "object"
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/logout": {
-            "post": {
-                "tags": [
-                    "Authentification"
-                ],
-                "summary": "Déconnexion de l'utilisateur connecté",
-                "description": "Révoque et supprime définitivement le jeton d'accès (Token Sanctum) actuellement utilisé pour cette session.",
-                "operationId": "authLogout",
-                "responses": {
-                    "200": {
-                        "description": "Déconnexion réussie et jeton révoqué",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "statut": {
-                                            "type": "boolean",
-                                            "example": true
-                                        },
-                                        "message": {
-                                            "type": "string",
-                                            "example": "Déconnexion réussie. Jeton révoqué avec succès."
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Non authentifié (Token manquant, expiré ou invalide)"
-                    }
-                },
-                "security": [
-                    {
-                        "sanctum": []
-                    }
-                ]
-            }
-        },
         "/client/fidelite/solde": {
             "get": {
                 "tags": [
@@ -863,91 +653,6 @@
                 ]
             }
         },
-        "/client/profil/modifier": {
-            "put": {
-                "tags": [
-                    "Module Client : Profil et Sécurité"
-                ],
-                "summary": "Mettre à jour les informations de base du profil client",
-                "description": "Permet au client connecté de modifier son nom et son prénom depuis l'application mobile Flutter.",
-                "operationId": "clientMettreAJourProfil",
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "required": [
-                                    "nom",
-                                    "prenom"
-                                ],
-                                "properties": {
-                                    "nom": {
-                                        "description": "Nouveau nom du client",
-                                        "type": "string",
-                                        "example": "Ndiaye"
-                                    },
-                                    "prenom": {
-                                        "description": "Nouveau prénom du client",
-                                        "type": "string",
-                                        "example": "Awa"
-                                    }
-                                },
-                                "type": "object"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "Profil mis à jour avec succès",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "statut": {
-                                            "type": "string",
-                                            "example": "success"
-                                        },
-                                        "message": {
-                                            "type": "string",
-                                            "example": "Votre profil a été mis à jour avec succès."
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    },
-                    "422": {
-                        "description": "Erreur de validation (champs manquants ou trop longs)",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "statut": {
-                                            "type": "string",
-                                            "example": "erreur"
-                                        },
-                                        "erreurs": {
-                                            "type": "object"
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Non authentifié (Jeton absent ou expiré)"
-                    }
-                },
-                "security": [
-                    {
-                        "sanctum": []
-                    }
-                ]
-            }
-        },
         "/client/profil/changer-pin": {
             "post": {
                 "tags": [
@@ -1050,6 +755,91 @@
                     },
                     "401": {
                         "description": "Non authentifié (Session expirée)"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/client/profil/question-secrete": {
+            "post": {
+                "tags": [
+                    "Module Client : Profil et Sécurité"
+                ],
+                "summary": "Configurer la question secrète du client connecté",
+                "description": "Permet au client d'ajouter ou de modifier sa question secrète et sa réponse depuis ses paramètres applicatifs. Ces informations serviront à l'authentifier en cas de réinitialisation de code PIN.",
+                "operationId": "clientConfigurerQuestionSecrete",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "question_secrete",
+                                    "response_secrete"
+                                ],
+                                "properties": {
+                                    "question_secrete": {
+                                        "description": "La question choisie par le client",
+                                        "type": "string",
+                                        "example": "Quel est le nom de votre premier animal de compagnie ?"
+                                    },
+                                    "response_secrete": {
+                                        "description": "La réponse correspondante (sera enregistrée de manière hachée)",
+                                        "type": "string",
+                                        "example": "Rex"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Question secrète enregistrée avec succès",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "statut": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Question secrète configurée avec succès."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Erreur de validation (champs obligatoires manquants ou trop longs)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "statut": {
+                                            "type": "string",
+                                            "example": "erreur"
+                                        },
+                                        "erreurs": {
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Non authentifié (Jeton absent ou expiré)"
                     }
                 },
                 "security": [
@@ -1437,6 +1227,425 @@
                     }
                 ]
             }
+        },
+        "/inscription": {
+            "post": {
+                "tags": [
+                    "Authentification"
+                ],
+                "summary": "Inscription d'un nouveau client",
+                "description": "0. INSCRIPTION AUTONOME DU CLIENT (Application Mobile Futter)",
+                "operationId": "authInscription",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "prenom",
+                                    "nom",
+                                    "telephone",
+                                    "email",
+                                    "code_pin"
+                                ],
+                                "properties": {
+                                    "prenom": {
+                                        "type": "string",
+                                        "example": "Mamadou"
+                                    },
+                                    "nom": {
+                                        "type": "string",
+                                        "example": "Diallo"
+                                    },
+                                    "telephone": {
+                                        "type": "string",
+                                        "example": "+221771234567"
+                                    },
+                                    "email": {
+                                        "type": "string",
+                                        "format": "email",
+                                        "example": "mamadou.diallo@isi.sn"
+                                    },
+                                    "code_pin": {
+                                        "type": "string",
+                                        "example": "1234"
+                                    },
+                                    "question_secrete": {
+                                        "type": "string",
+                                        "example": "Votre ville natale ?",
+                                        "nullable": true
+                                    },
+                                    "response_secrete": {
+                                        "type": "string",
+                                        "example": "Dakar",
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Compte créé avec succès"
+                    },
+                    "422": {
+                        "description": "Erreur de validation"
+                    }
+                }
+            }
+        },
+        "/auth/verifier-appareil": {
+            "post": {
+                "tags": [
+                    "Authentification"
+                ],
+                "summary": "Étape 0 : Vérifier la liaison entre le numéro et cet appareil",
+                "description": "1. VERIFICATION CROISEE COMPTE / APPAREIL (Au démarrage de flutter)",
+                "operationId": "authCheckDeviceUserMatch",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "telephone",
+                                    "device_id"
+                                ],
+                                "properties": {
+                                    "telephone": {
+                                        "type": "string",
+                                        "example": "771111111"
+                                    },
+                                    "device_id": {
+                                        "type": "string",
+                                        "example": "f7b129a0-c3bc"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Appareil déjà lié, afficher écran PIN normal"
+                    },
+                    "202": {
+                        "description": "Nouvel appareil détecté, rediriger vers authentification forte"
+                    },
+                    "404": {
+                        "description": "Numéro de téléphone inconnu"
+                    }
+                }
+            }
+        },
+        "/login": {
+            "post": {
+                "tags": [
+                    "Authentification"
+                ],
+                "summary": "Connexion classique (Pour appareils validés)",
+                "description": "2. CONNEXION DU CLIENT OU DE L'ADMIN sur un appareil connue (Code PIN)",
+                "operationId": "authLoginNormal",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "telephone",
+                                    "code_pin",
+                                    "device_id"
+                                ],
+                                "properties": {
+                                    "telephone": {
+                                        "type": "string",
+                                        "example": "771111111"
+                                    },
+                                    "code_pin": {
+                                        "type": "string",
+                                        "example": "1234"
+                                    },
+                                    "device_id": {
+                                        "type": "string",
+                                        "example": "f7b129a0-c3bc"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Connexion accordée"
+                    },
+                    "401": {
+                        "description": "PIN incorrect ou appareil interdit"
+                    }
+                }
+            }
+        },
+        "/login/nouvel-appareil/initier": {
+            "post": {
+                "tags": [
+                    "Authentification"
+                ],
+                "summary": "Liaison Étape 1 : Vérification croisée (KYC) et envoi de l'OTP de sécurité",
+                "description": "3. - ÉTAPE 1 : ENREGISTRER UN NOUVEL APPAREIL (Vérification identité globale + Envoi OTP)",
+                "operationId": "authNouvelAppareilInitier",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "telephone",
+                                    "code_pin",
+                                    "email"
+                                ],
+                                "properties": {
+                                    "telephone": {
+                                        "type": "string",
+                                        "example": "771111111"
+                                    },
+                                    "code_pin": {
+                                        "type": "string",
+                                        "example": "1234"
+                                    },
+                                    "email": {
+                                        "type": "string",
+                                        "example": "mamadou.diallo@isi.sn"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Données valides, OTP expédié par mail"
+                    },
+                    "401": {
+                        "description": "Informations d'identité invalides"
+                    }
+                }
+            }
+        },
+        "/login/nouvel-appareil/valider": {
+            "post": {
+                "tags": [
+                    "Authentification"
+                ],
+                "summary": "Liaison Étape 2 : Valider le code OTP et lier l'appareil",
+                "description": "3. - ÉTAPE 2 : VALIDATION DE L'OTP + LIAISON ET CONNEXION FINALE",
+                "operationId": "authNouvelAppareilValider",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "telephone",
+                                    "code_otp",
+                                    "device_id"
+                                ],
+                                "properties": {
+                                    "telephone": {
+                                        "type": "string",
+                                        "example": "771111111"
+                                    },
+                                    "code_otp": {
+                                        "type": "string",
+                                        "example": "123456"
+                                    },
+                                    "device_id": {
+                                        "type": "string",
+                                        "example": "f7b129a0-c3bc"
+                                    },
+                                    "device_name": {
+                                        "type": "string",
+                                        "example": "Infinix Note 40"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Appareil enregistré pour ce compte, token généré"
+                    },
+                    "401": {
+                        "description": "Code OTP invalide ou expiré"
+                    }
+                }
+            }
+        },
+        "/logout": {
+            "post": {
+                "tags": [
+                    "Authentification"
+                ],
+                "summary": "Déconnexion de l'utilisateur connecté",
+                "description": "Révoque et supprime définitivement le jeton d'accès (Token Sanctum) actuellement utilisé pour cette session.",
+                "operationId": "authLogout",
+                "responses": {
+                    "200": {
+                        "description": "Déconnexion réussie et jeton révoqué",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "statut": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Déconnexion réussie. Jeton révoqué avec succès."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Non authentifié (Token manquant, expiré ou invalide)"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/recuperation/verifier-identite": {
+            "post": {
+                "tags": [
+                    "Récupération de compte"
+                ],
+                "summary": "PIN oublié Étape 1 : Audit des habitudes financières",
+                "description": "Vérifie l'identité du client via ses habitudes de transactions et sa question secrète. Accessible uniquement depuis un appareil déjà enregistré. En cas de succès, retourne un ticket d'autorisation valide 5 minutes.",
+                "operationId": "recuperationVerifierIdentite",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "telephone",
+                                    "device_id",
+                                    "montant_derniere_tx",
+                                    "contact_frequent"
+                                ],
+                                "properties": {
+                                    "telephone": {
+                                        "type": "string",
+                                        "example": "771111111"
+                                    },
+                                    "device_id": {
+                                        "type": "string",
+                                        "example": "f7b129a0-c3bc"
+                                    },
+                                    "montant_derniere_tx": {
+                                        "description": "Montant exact de la toute dernière transaction",
+                                        "type": "number",
+                                        "example": 15000
+                                    },
+                                    "contact_frequent": {
+                                        "description": "Numéro ou nom du contact avec qui vous avez le plus de transactions (envoi ET réception)",
+                                        "type": "string",
+                                        "example": "771234567"
+                                    },
+                                    "reponse_secrete": {
+                                        "description": "Requis uniquement si une question secrète a été configurée",
+                                        "type": "string",
+                                        "example": "Dakar",
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Identité confirmée, ticket d'autorisation généré"
+                    },
+                    "400": {
+                        "description": "Réponses incorrectes ou appareil non autorisé"
+                    },
+                    "404": {
+                        "description": "Compte introuvable"
+                    }
+                }
+            }
+        },
+        "/recuperation/reinitialiser-pin": {
+            "post": {
+                "tags": [
+                    "Récupération de compte"
+                ],
+                "summary": "PIN oublié Étape 2 : Réinitialiser le code PIN",
+                "description": "Applique le nouveau code PIN après validation du ticket d'autorisation obtenu à l'étape 1. Le ticket est à usage unique et expire dans 5 minutes.",
+                "operationId": "recuperationReinitialiserPin",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "telephone",
+                                    "ticket",
+                                    "nouveau_pin",
+                                    "nouveau_pin_confirmation"
+                                ],
+                                "properties": {
+                                    "telephone": {
+                                        "type": "string",
+                                        "example": "771111111"
+                                    },
+                                    "ticket": {
+                                        "description": "Ticket reçu à l'étape 1",
+                                        "type": "string",
+                                        "example": "482910"
+                                    },
+                                    "nouveau_pin": {
+                                        "description": "Nouveau code PIN à 4 chiffres",
+                                        "type": "string",
+                                        "example": "4321"
+                                    },
+                                    "nouveau_pin_confirmation": {
+                                        "description": "Confirmation du nouveau code PIN",
+                                        "type": "string",
+                                        "example": "4321"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Code PIN réinitialisé avec succès"
+                    },
+                    "400": {
+                        "description": "Ticket invalide ou expiré"
+                    },
+                    "422": {
+                        "description": "Erreur de validation"
+                    }
+                }
+            }
         }
     },
     "components": {
@@ -1451,12 +1660,12 @@
     },
     "tags": [
         {
-            "name": "Module Admin : Opérations Guichet",
-            "description": "Module Admin : Opérations Guichet"
+            "name": "Module Admin : Gestion Clients",
+            "description": "Module Admin : Gestion Clients"
         },
         {
-            "name": "Authentification",
-            "description": "Authentification"
+            "name": "Module Admin : Opérations Guichet",
+            "description": "Module Admin : Opérations Guichet"
         },
         {
             "name": "Module Client : Programme de Fidélité",
@@ -1473,6 +1682,14 @@
         {
             "name": "Module Client : Transferts",
             "description": "Module Client : Transferts"
+        },
+        {
+            "name": "Authentification",
+            "description": "Authentification"
+        },
+        {
+            "name": "Récupération de compte",
+            "description": "Récupération de compte"
         }
     ]
 }

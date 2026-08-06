@@ -164,23 +164,26 @@ class FideliteController extends Controller
 
         $pointsAConvertir = (int) $request->points_a_convertir;
 
-        // Récupération du compte de fidété avec verrouillage de sécurité
-        $fidelite = Fidelite::where('user_id', $client->id)->first();
-
-        if (!$fidelite || $fidelite->solde_points < $pointsAConvertir) {
-            return response()->json([
-                'statut' => 'erreur',
-                'message' => 'Votre solde de point de fidélité est insuffisant pour cette opération.',
-            ], 400);
-        }
-
-        // Calcul du gain financier (1 point = 2 FCFA)
-        $montantGagne = $pointsAConvertir * 2;
-
-        // Début de traitement monétaire sécurisé
+        // 2. Début du traitement monétaire sécurisé (Normes ACID d'atomicité)
         DB::beginTransaction();
 
         try {
+            // SÉCURITÉ CRITIQUE CORRIGÉE : Utilisation du verrou pessimiste lockForUpdate() à l'intérieur de la transaction
+            // Cela bloque toute tentative de conversion simultanée frauduleuse (Race Condition)
+            $fidelite = Fidelite::lockForUpdate()->where('user_id', $client->id)->first();
+
+            // Comparaison des points
+            if (!$fidelite || $fidelite->solde_points < $pointsAConvertir) {
+                DB::rollBack();
+                return response()->json([
+                    'statut' => 'erreur',
+                    'message' => 'Votre solde de points de fidélité est insuffisant pour cette opération.',
+                ], 400); // Code HTTP 400 : Requête incorrecte
+            }
+
+            // Calcul du gain financier (1 point = 2 FCFA)
+            $montantGagne = $pointsAConvertir * 2;
+
             // A. Déduction des points de fidélité
             $fidelite->solde_points -= $pointsAConvertir;
             $fidelite->save();
@@ -199,7 +202,7 @@ class FideliteController extends Controller
                 'destinataire_id' => $client->id,
                 'montant' => $montantGagne,
                 'frais' => 0.00,
-                'type' => 'depôt',
+                'type' => 'depot',
                 'statut' => 'complete',
             ]);
 

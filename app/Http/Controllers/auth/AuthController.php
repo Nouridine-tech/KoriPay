@@ -1,10 +1,10 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\auth;
 
-use App\Models\User;
+use App\Http\Controllers\Controller;
 use App\Models\Fidelite;
-use App\Models\UserDevice;
+use App\Models\User;
 use App\Models\VerificationOtp;
 use App\Notifications\NouvelAppareilNotification;
 use Carbon\Carbon;
@@ -35,7 +35,7 @@ class AuthController extends Controller
                     new OA\Property(property: "email", type: "string", format: "email", example: "mamadou.diallo@isi.sn"),
                     new OA\Property(property: "code_pin", type: "string", example: "1234"),
                     new OA\Property(property: "question_secrete", type: "string", example: "Votre ville natale ?", nullable: true),
-                    new OA\Property(property: "reponse_secrete", type: "string", example: "Dakar", nullable: true)
+                    new OA\Property(property: "response_secrete", type: "string", example: "Dakar", nullable: true)
                 ]
             )
         ),
@@ -54,6 +54,8 @@ class AuthController extends Controller
             'telephone' => ['required', 'string', 'unique:users,telephone'], //Pour eviter les doublons de comptes
             'email' => ['required', 'email', 'unique:users,email'], //Indispensable pour les e-factures
             'code_pin' => ['required', 'string', 'digits:4'],
+            'question_secrete' => ['nullable', 'string', 'max:255'],
+            'response_secrete' => ['nullable', 'string', 'max:255', 'required_with:question_secrete'], //Pour le rendre dependant de la QS
         ]);
 
         //Si la validation échoue, on retourne immédiatement les erreurs au format JSON
@@ -125,10 +127,18 @@ class AuthController extends Controller
 
     public function verifierEmpreinteAppareil(Request $request)
     {
-        $request->validate([
+        $validateur = Validator::make($request->all(), [
             'telephone' => 'required|string',
             'device_id' => 'required|string',
         ]);
+
+        if ($validateur->fails()) {
+            return response()->json([
+                'statut' => 'erreur',
+                'erreurs' => $validateur->errors()
+            ], 422); // Code HTTP 422 : Données non traitables
+        }
+
 
         //1. On cherche d'abord si le client existe dans la BD
         $user = User::where('telephone', $request->telephone)->first();
@@ -148,7 +158,7 @@ class AuthController extends Controller
             return response()->json([
                 'statut' => 'nouvelle_appareil',
                 'message' => 'Appareil inconnu pour ce compte. Redirection automatique vers l\'interface de liaison.'
-            ], 202); // Code HTTP 202 : Requête acceptée mais nécessite un traitement (Liaison fort)
+            ], 202); // Code HTTP 202 : Requête acceptée, mais nécessite un traitement (Liaison fort)
         }
 
         // LOGIQUE SI APPAREIL CONNU : Feu vert, Flutter peut afficher la simple saisie du code PIN
@@ -236,7 +246,7 @@ class AuthController extends Controller
 
         return response()->json([
             'statut' => 'success',
-            'message' => 'Connexion réussi avec succés.',
+            'message' => 'Connexion réussi avec succès.',
             'token' => $token,
             'user' => $user,
         ], 200); //Code HTTP 200: OK
@@ -269,11 +279,18 @@ class AuthController extends Controller
 
     public function initierNouvelAppareil(Request $request)
     {
-        $request->validate([
+        $validateur = Validator::make($request->all(), [
             'telephone' => ['required', 'string'],
             'code_pin' => ['required', 'string'],
             'email' => ['required', 'string'],
         ]);
+
+        if ($validateur->fails()) {
+            return response()->json([
+                'statut' => 'erreur',
+                'erreurs' => $validateur->errors(),
+            ], 422); //Code HTTP 422 : Entités non traités
+        }
 
         // SECURITE MAXIMUM (Vérification croisée) : Pour lier l'appareil, il faut obligatoirement fournir
         // le Téléphone ET l'E-mail associés à la ligne, en plus du bon code PIN.
@@ -328,11 +345,18 @@ class AuthController extends Controller
     )]
     public function validerNouvelAppareil(Request $request)
     {
-        $request->validate([
+        $validateur = Validator::make($request->all(), [
             'telephone' => ['required', 'string'],
             'code_otp' => ['required', 'digits:6'],
             'device_id' => ['required', 'string'],
         ]);
+
+        if ($validateur->fails()) {
+            return response()->json([
+                'statut' => 'erreur',
+                'erreurs' => $validateur->errors(),
+            ], 422); // Code HTTP 422 : Entités non traitées
+        }
 
         $user = User::where('telephone', $request->telephone)->first();
         if (!$user){

@@ -285,7 +285,7 @@ class TransfertController extends Controller
                 DB::rollBack();
                 return response()->json([
                     'statut' => 'erreurs',
-                    'message' => 'Code OTP incorrect ou expired.'
+                    'message' => 'Code OTP incorrect ou expiré..'
                 ], 400); // Code HTTP 400 :
             }
 
@@ -350,7 +350,7 @@ class TransfertController extends Controller
             $destinataire->save();
 
             // C. Génération d'une référence unique pour l'opération
-            $referenceUnique = 'KP-TX' .strtoupper(Str::random(10));
+            $referenceUnique = 'KP-TX-' .strtoupper(Str::random(10));
             // D. Ecriture comptable 1 : La ligne de débit pour l'historique de l'expediteur
             $transactionTransfert = Transaction::create([
                 'reference' => $referenceUnique,

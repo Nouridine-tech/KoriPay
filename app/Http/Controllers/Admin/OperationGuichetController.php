@@ -11,6 +11,7 @@ use App\Notifications\CodeOtpNotification;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Validator;
 use OpenApi\Attributes as OA;
@@ -105,7 +106,7 @@ class OperationGuichetController extends Controller
 
     public function depot(Request $request)
     {
-        //1. Sécurité : On verifie que l'utilisateur connecté est bien l'administrateur
+        //1. Sécurité : On vérifie que l'utilisateur connecté est bien l'administrateur
         if ($request->user()->role !== 'admin') {
             return response()->json([
                 'statut' => 'erreur',
@@ -160,7 +161,7 @@ class OperationGuichetController extends Controller
                 'destinataire_id' => $client->id,
                 'montant' => $request->montant,
                 'frais' => 0.00,
-                'type' => 'depôt',
+                'type' => 'depot',
                 'statut' => 'complete',
             ]);
 
@@ -168,7 +169,13 @@ class OperationGuichetController extends Controller
             DB::commit();
 
             //5. Envoi immédiat de la facture numérique par e-mail au client
-            $client->notify(new FactureTransactionNotification($transaction, 'destinataire'));
+            try {
+                // Protégé dans son propre bloc pour éviter qu'une panne SMTP n'annule la transaction monétaire valide
+                $client->notify(new FactureTransactionNotification($transaction, 'destinataire'));
+            } catch (\Exception $emailException) {
+                // Enregistrement silencieux de la panne réseau dans les logs Laravel sans perturber l'expérience utilisateur
+                Log::error('Échec d\'envoi de la facture par e-mail pour le dépôt ' . $referenceUnique . ' : ' . $emailException->getMessage());
+            }
 
             //Réponse JSON renvoyée à la console d'administration React
             return response()->json([
@@ -279,7 +286,8 @@ class OperationGuichetController extends Controller
         VerificationOtp::create([
             'user_id' => $client->id,
             'otp' => $codeOtp,
-            'type_action' => 'transaction',
+            'type_action' => 'retrait',
+            'montant' => $request->montant,
             'expire_a' => Carbon::now()->addMinutes(5),
             'est_utilise' => false,
         ]);
@@ -368,30 +376,39 @@ class OperationGuichetController extends Controller
         // 1. Algorithme de vérification de l'OTP en base de données
         $otpRecord = VerificationOtp::where('user_id', $client->id)
             ->where('otp', $request->code_otp)
-            ->where('type_action', 'transaction')
+            ->where('type_action', 'retrait')
             ->where('est_utilise', false)
             ->latest() //Analyse en priorité du jeton le plus récent
-            ->first();
-        // Si aucun enregistrement ne correspond ou si le code est faux
+        ->first();
+
+        // 2. Si aucun enregistrement ne correspond ou si le code est faux
         if (!$otpRecord) {
             return response()->json([
                 'statut' => 'erreur',
                 'message' => 'Code OTP de validation incorrect ou déjà consommé.'
-            ], 400); // Code HTTP 400 :
+            ], 400); // Code HTTP 400 : Requête invalide
         }
 
-        //Vérification de la validité temporelle grâce à Carbon
+        // 3. Vérification de la validité temporelle grâce à Carbon
         if ($otpRecord->expire_a->isPast()) {
             return response()->json([
                 'statut' => 'erreur',
                 'message' => 'Ce code OTP a expiré. Veuillez en générer un nouveau.'
-            ], 400); // Code HTTP 400 :
+            ], 400); // Code HTTP 400 : Requête invalide
         }
 
-        // 2. Traitement monétaire sécurisé encapsulé
+        // 4. SÉCURITÉ MONÉTIQUE ABSOLUE (Anti-Falsification) : On vérifie que le montant demandé correspond à l'initiation
+        if ((float) $otpRecord->montant !== (float) $request->montant) {
+            return response()->json([
+                'statut' => 'erreur',
+                'message' => 'Tentative de falsification monétaire détectée. Le montant ne correspond pas au jeton généré.'
+            ], 400); // Code HTTP 400 : Requête invalide
+        }
+
+        // 5. Traitement monétaire sécurisé encapsulé
         DB::beginTransaction();
         try {
-            //Re-vérification de sécurité anti-fraude concurrente pour s'assurer que le solde est toujours disponible
+            //Revérification de sécurité anti-fraude concurrente pour s'assurer que le solde est toujours disponible
             if ($client->solde < $request->montant) {
                 DB::rollBack();
                 return response()->json([
@@ -400,18 +417,18 @@ class OperationGuichetController extends Controller
                 ], 400); // Code HTTP 400 :
             }
 
-            // Consommation immédiate du code OTP pour empêcher toute réutilisation malveillante
+            // 1. Consommation immédiate du code OTP pour empêcher toute réutilisation malveillante
             $otpRecord->est_utilise = true;
             $otpRecord->save();
 
-            //Soustraction des fonds virtuel du client
+            // 2. Soustraction des fonds virtuel du client
             $client->solde -= $request->montant;
             $client->save();
 
-            //Génération de la référence unique de débit
+            // 3. Génération de la référence unique de débit
             $referenceUnique = 'KP-RET-' .strtoupper(Str::random(10));
 
-            //Ecriture comptable dans la table 'transactions'
+            // 4. Ecriture comptable dans la table 'transactions'
             $transaction = Transaction::create([
                 'reference' => $referenceUnique,
                 'expediteur_id' => $client->id,
@@ -422,11 +439,15 @@ class OperationGuichetController extends Controller
                 'statut' => 'complete',
             ]);
 
-            //Validation finale et écriture persistante dans PostgreSQL
+            // 5. Validation finale et écriture persistante dans PostgreSQL
             DB::commit();
 
-            // 3. Notification de retrait envoyée intantanément
-            $client->notify(new FactureTransactionNotification($transaction, 'expediteur'));
+            // 6. Notification de retrait envoyée intantanément
+            try {
+                $client->notify(new FactureTransactionNotification($transaction, 'expediteur'));
+            } catch (\Exception $emailException) {
+                Log::error('Échec d\'envoi de la notification de retrait pour la transaction ' . $referenceUnique . ' : ' . $emailException->getMessage());
+            }
 
             return response()->json([
                 'statut' => 'success',

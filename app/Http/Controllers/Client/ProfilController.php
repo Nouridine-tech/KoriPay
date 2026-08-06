@@ -137,8 +137,9 @@ class ProfilController extends Controller
         //Validation stricte des données entrantes
         $validateur = Validator::make($request->all(), [
             'ancien_mot_de_passe' => ['required', 'string'],
-            'nouveau_mot_de_passe' => ['required', 'string', 'min:4', 'confirmed'], //confirmed permet de chercher le champ nouveau_Mot_De_Pase_Confirmation
+            'nouveau_mot_de_passe' => ['required', 'string', 'digits:4', 'confirmed'], //confirmed permet de chercher le champ nouveau_Mot_De_Pase_Confirmation
         ]);
+
         if ($validateur->fails()) {
             return response()->json([
                 'statut' => 'erreur',
@@ -150,7 +151,7 @@ class ProfilController extends Controller
         if (!Hash::check($request->ancien_mot_de_passe, $client->code_pin)) {
             return response()->json([
                 'statut' => 'erreur',
-                'message' => 'L\'ancien mot de passe saisie est incorrect.'
+                'message' => 'L\'ancien mot de passe saisi est incorrect.'
             ], 400);
         }
 
@@ -179,10 +180,19 @@ class ProfilController extends Controller
         requestBody: new OA\RequestBody(
             required: true,
             content: new OA\JsonContent(
-                required: ["question_secrete", "reponse_secrete"],
+                required: ["question_secrete", "response_secrete"],
                 properties: [
-                    new OA\Property(property: "question_secrete", type: "string", example: "Quel est le nom de votre premier animal de compagnie ?", description: "La question choisie par le client"),
-                    new OA\Property(property: "reponse_secrete", type: "string", example: "Rex", description: "La réponse correspondante (sera enregistrée de manière hachée)")
+                    new OA\Property(
+                        property: "question_secrete",
+                        type: "string",
+                        example: "Quel est le nom de votre premier animal de compagnie ?",
+                        description: "La question choisie par le client"
+                    ),
+                    new OA\Property(
+                        property: "response_secrete",
+                        type: "string", example: "Rex",
+                        description: "La réponse correspondante (sera enregistrée de manière hachée)"
+                    )
                 ]
             )
         ),
@@ -237,7 +247,7 @@ class ProfilController extends Controller
            'question_secrete' => $request->question_secrete,
            // Sécurité monétique : On force le passage en minuscules (strtolower) pour éviter les rejets dus aux majuscules,
            // puis on hache la réponse (Hash::make) pour qu'elle soit illisible en base de données, même pour un admin.
-           'response_secrete' => Hash::make($request->response_secrete)
+           'response_secrete' => Hash::make(strtolower($request->response_secrete))
        ]);
 
        //Reponse json
