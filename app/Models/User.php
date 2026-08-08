@@ -73,4 +73,11 @@ class User extends Authenticatable
     {
         return $this->hasMany(UserDevice::class);
     }
+
+    // RELATION : Un utilisateur possède un enregistrement de tentatives de connexion
+    // Créé automatiquement à la première tentative échouée via firstOrCreate()
+    public function tentativeConnexion(): HasOne
+    {
+        return $this->hasOne(TentativeConnexion::class, 'user_id');
+    }
 }

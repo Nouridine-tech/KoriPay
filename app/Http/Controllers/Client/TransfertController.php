@@ -102,6 +102,14 @@ class TransfertController extends Controller
             ], 422); // Code HTTP 422 :
         }
 
+        //Vérification du statut de l'expéditeur
+        if (in_array($expediteur->statut, ['suspendu', 'gele'])) {
+            return response()->json([
+                'statut' => 'erreurs',
+                'message' => 'Votre compte est ' .$expediteur->statut. '. Vous ne pouvez pas effectuer de transfert.'
+            ], 403); // Code HTTP 403 : Interdit
+        }
+
         // 3. Vérification de sécurité sur le destinataire
         if ($expediteur->telephone === $request->telephone_destinataire) {
             return response()->json([
@@ -110,18 +118,20 @@ class TransfertController extends Controller
             ], 400); // Code HTTP 400 :
         }
 
+        // Vérification si le destinataire existe
         $destinataire = User::where('telephone', $request->telephone_destinataire)->where('role', 'client')->first();
         if (!$destinataire) {
             return response()->json([
                 'statut' => 'erreurs',
                 'message' => 'Aucun client KoriPay trouvé avec ce numéro.'
-            ], 404); // Code HTTP 404 :
+            ], 404); // Code HTTP 404 : Not found
         }
 
+        // Verification du statut du destinataire
         if ($destinataire->statut === 'suspendu') {
             return response()->json([
                 'statut' => 'erreurs',
-                'message' => 'Impossible d\'envoyer des fonds à ce compte car il suspendu.'
+                'message' => 'Impossible d\'envoyer des fonds à ce compte car il est suspendu.'
             ], 400); // Code HTTP 400 :
         }
 
@@ -259,15 +269,32 @@ class TransfertController extends Controller
             ], 422); // Code HTTP 422 :
         }
 
+        //Vérification du statut de l'expéditeur
+        if (in_array($expediteur->statut, ['suspendu', 'gele'])) {
+            return response()->json([
+                'statut' => 'erreurs',
+                'message' => 'Votre compte est ' .$expediteur->statut. '. Vous ne pouvez pas effectuer de transfert.'
+            ], 403); // Code HTTP 403 : Interdit
+        }
+
         //Recherche du destinataire dans la base de donnée
         $destinataire = User::where('telephone', $request->telephone_destinataire)
             ->where('role', 'client')
-            ->first();
+        ->first();
+
         if (!$destinataire) {
             return response()->json([
                 'statut' => 'erreurs',
                 'message' => 'Destinataire introuvable.'
-            ], 404); // Code HTTP 404 :
+            ], 404); // Code HTTP 404 : Not found
+        }
+
+        // Verification du statut du destinataire
+        if ($destinataire->statut === 'suspendu') {
+            return response()->json([
+                'statut' => 'erreurs',
+                'message' => 'Impossible d\'envoyer des fonds à ce compte car il est suspendu.'
+            ], 400); // Code HTTP 400 :
         }
 
         // Utilisation d'un verrou sur l'OTP pour bloquer le multi_clic

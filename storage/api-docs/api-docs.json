@@ -12,6 +12,371 @@
         }
     ],
     "paths": {
+        "/admin/creer-admin": {
+            "post": {
+                "tags": [
+                    "Module Admin : Gestion Comptes"
+                ],
+                "summary": "Créer un nouveau compte administrateur",
+                "description": "Permet à un administrateur connecté de créer un nouveau compte admin. Seul un admin peut créer un autre admin.",
+                "operationId": "adminCreerAdmin",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "nom",
+                                    "prenom",
+                                    "telephone",
+                                    "email",
+                                    "code_pin"
+                                ],
+                                "properties": {
+                                    "nom": {
+                                        "type": "string",
+                                        "example": "Diop"
+                                    },
+                                    "prenom": {
+                                        "type": "string",
+                                        "example": "Moussa"
+                                    },
+                                    "telephone": {
+                                        "type": "string",
+                                        "example": "770000001"
+                                    },
+                                    "email": {
+                                        "type": "string",
+                                        "example": "moussa.diop@koripay.com"
+                                    },
+                                    "code_pin": {
+                                        "type": "string",
+                                        "example": "4321"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Compte admin créé avec succès"
+                    },
+                    "403": {
+                        "description": "Droits insuffisants"
+                    },
+                    "422": {
+                        "description": "Erreur de validation"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/admin/clients": {
+            "get": {
+                "tags": [
+                    "Module Admin : Gestion Clients"
+                ],
+                "summary": "Lister tous les clients de la plateforme",
+                "description": "Retourne la liste complète de tous les comptes clients avec leurs informations et statuts.",
+                "operationId": "adminVoirTousLesClients",
+                "responses": {
+                    "200": {
+                        "description": "Liste des clients retournée avec succès"
+                    },
+                    "403": {
+                        "description": "Droits insuffisants"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/admin/clients/{id}": {
+            "get": {
+                "tags": [
+                    "Module Admin : Gestion Clients"
+                ],
+                "summary": "Voir les informations détaillées d'un client",
+                "description": "Retourne toutes les informations d'un client spécifique, incluant son solde, ses points de fidélité et son historique de transactions.",
+                "operationId": "adminVoirUnClient",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "example": 2
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Informations client retournées"
+                    },
+                    "403": {
+                        "description": "Droits insuffisants"
+                    },
+                    "404": {
+                        "description": "Client introuvable"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/admin/transactions": {
+            "get": {
+                "tags": [
+                    "Module Admin : Supervision"
+                ],
+                "summary": "Voir l'historique global de toutes les transactions",
+                "description": "Retourne l'ensemble des transactions effectuées sur la plateforme KoriPay, triées par date décroissante.",
+                "operationId": "adminVoirToutesLesTransactions",
+                "responses": {
+                    "200": {
+                        "description": "Historique global retourné"
+                    },
+                    "403": {
+                        "description": "Droits insuffisants"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/admin/clients/{id}/suspendre": {
+            "put": {
+                "tags": [
+                    "Module Admin : Gestion Clients"
+                ],
+                "summary": "Suspendre le compte d'un client",
+                "description": "Bloque totalement l'accès au compte d'un client. Le client ne peut plus se connecter, envoyer ni recevoir d'argent.",
+                "operationId": "adminSuspendreCompte",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "example": 2
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "motif"
+                                ],
+                                "properties": {
+                                    "motif": {
+                                        "type": "string",
+                                        "example": "Activité suspecte détectée sur le compte."
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Compte suspendu avec succès"
+                    },
+                    "403": {
+                        "description": "Droits insuffisants"
+                    },
+                    "404": {
+                        "description": "Client introuvable"
+                    },
+                    "400": {
+                        "description": "Compte déjà suspendu"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/admin/clients/{id}/geler": {
+            "put": {
+                "tags": [
+                    "Module Admin : Gestion Clients"
+                ],
+                "summary": "Geler le compte d'un client",
+                "description": "Bloque uniquement les transferts sortants du compte. Le client peut toujours se connecter, voir son solde et recevoir de l'argent. Utilisé en cas de suspicion d'arnaque en cours.",
+                "operationId": "adminGelerCompte",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "example": 2
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "motif"
+                                ],
+                                "properties": {
+                                    "motif": {
+                                        "type": "string",
+                                        "example": "Signalement arnaque en attente de vérification."
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Compte gelé avec succès"
+                    },
+                    "403": {
+                        "description": "Droits insuffisants"
+                    },
+                    "404": {
+                        "description": "Client introuvable"
+                    },
+                    "400": {
+                        "description": "Compte déjà gelé ou suspendu"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/admin/clients/{id}/reactiver": {
+            "put": {
+                "tags": [
+                    "Module Admin : Gestion Clients"
+                ],
+                "summary": "Réactiver un compte client suspendu ou gelé",
+                "description": "Rétablit l'accès complet au compte d'un client après vérification et résolution du problème ayant motivé la suspension ou le gel.",
+                "operationId": "adminReactiverCompte",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "example": 2
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Compte réactivé avec succès"
+                    },
+                    "403": {
+                        "description": "Droits insuffisants"
+                    },
+                    "404": {
+                        "description": "Client introuvable"
+                    },
+                    "400": {
+                        "description": "Compte déjà actif"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/admin/transactions/{reference}/annuler": {
+            "put": {
+                "tags": [
+                    "Module Admin : Supervision"
+                ],
+                "summary": "Annuler une transaction et rembourser l'expéditeur",
+                "description": "Permet à l'admin d'annuler une transaction dans un délai de 7 jours après son exécution, à condition que le destinataire dispose encore du montant sur son solde. L'expéditeur est automatiquement remboursé.",
+                "operationId": "adminAnnulerTransaction",
+                "parameters": [
+                    {
+                        "name": "reference",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "example": "KP-TX-ABC123"
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "motif"
+                                ],
+                                "properties": {
+                                    "motif": {
+                                        "type": "string",
+                                        "example": "Arnaque signalée par le client expéditeur."
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Transaction annulée et expéditeur remboursé"
+                    },
+                    "400": {
+                        "description": "Transaction non annulable (délai dépassé, solde insuffisant, déjà annulée)"
+                    },
+                    "403": {
+                        "description": "Droits insuffisants"
+                    },
+                    "404": {
+                        "description": "Transaction introuvable"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
         "/admin/client/modifier-identite": {
             "put": {
                 "tags": [
@@ -391,6 +756,509 @@
                         "sanctum": []
                     }
                 ]
+            }
+        },
+        "/inscription": {
+            "post": {
+                "tags": [
+                    "Authentification"
+                ],
+                "summary": "Inscription d'un nouveau client",
+                "description": "0. INSCRIPTION AUTONOME DU CLIENT (Application Mobile Futter)",
+                "operationId": "authInscription",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "prenom",
+                                    "nom",
+                                    "telephone",
+                                    "email",
+                                    "code_pin"
+                                ],
+                                "properties": {
+                                    "prenom": {
+                                        "type": "string",
+                                        "example": "Mamadou"
+                                    },
+                                    "nom": {
+                                        "type": "string",
+                                        "example": "Diallo"
+                                    },
+                                    "telephone": {
+                                        "type": "string",
+                                        "example": "+221771234567"
+                                    },
+                                    "email": {
+                                        "type": "string",
+                                        "format": "email",
+                                        "example": "mamadou.diallo@isi.sn"
+                                    },
+                                    "code_pin": {
+                                        "type": "string",
+                                        "example": "1234"
+                                    },
+                                    "question_secrete": {
+                                        "type": "string",
+                                        "example": "Votre ville natale ?",
+                                        "nullable": true
+                                    },
+                                    "response_secrete": {
+                                        "type": "string",
+                                        "example": "Dakar",
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Compte créé avec succès"
+                    },
+                    "422": {
+                        "description": "Erreur de validation"
+                    }
+                }
+            }
+        },
+        "/auth/verifier-appareil": {
+            "post": {
+                "tags": [
+                    "Authentification"
+                ],
+                "summary": "Étape 0 : Vérifier la liaison entre le numéro et cet appareil",
+                "description": "1. VERIFICATION CROISEE COMPTE / APPAREIL (Au démarrage de flutter)",
+                "operationId": "authCheckDeviceUserMatch",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "telephone",
+                                    "device_id"
+                                ],
+                                "properties": {
+                                    "telephone": {
+                                        "type": "string",
+                                        "example": "771111111"
+                                    },
+                                    "device_id": {
+                                        "type": "string",
+                                        "example": "f7b129a0-c3bc"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Appareil déjà lié, afficher écran PIN normal"
+                    },
+                    "202": {
+                        "description": "Nouvel appareil détecté, rediriger vers authentification forte"
+                    },
+                    "404": {
+                        "description": "Numéro de téléphone inconnu"
+                    }
+                }
+            }
+        },
+        "/login": {
+            "post": {
+                "tags": [
+                    "Authentification"
+                ],
+                "summary": "Connexion classique avec protection anti-force brute",
+                "description": "Permet d'ouvrir une session utilisateur. Intègre un algorithme glissant sur 5 minutes limitant les échecs consécutifs. Au bout de 3 tentatives infructueuses, le compte est verrouillé automatiquement pendant 30 minutes.",
+                "operationId": "authLoginNormal",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "telephone",
+                                    "code_pin",
+                                    "device_id"
+                                ],
+                                "properties": {
+                                    "telephone": {
+                                        "description": "Numéro de téléphone unique servant d'identifiant",
+                                        "type": "string",
+                                        "example": "771111111"
+                                    },
+                                    "code_pin": {
+                                        "description": "Code secret d'accès à 4 chiffres",
+                                        "type": "string",
+                                        "example": "1234"
+                                    },
+                                    "device_id": {
+                                        "description": "Identifiant matériel unique de l'appareil extrait par Flutter",
+                                        "type": "string",
+                                        "example": "f7b129a0-c3bc"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Authentification réussie, jeton de session émis et timestamps matériels mis à jour",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "statut": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Connexion réussie avec succès."
+                                        },
+                                        "token": {
+                                            "type": "string",
+                                            "example": "1|kori_token_session..."
+                                        },
+                                        "user": {
+                                            "description": "Payload complet de l'utilisateur connecté",
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Identifiants invalides (Le message indique de manière dynamique le nombre de tentatives restantes)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "statut": {
+                                            "type": "string",
+                                            "example": "erreur"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Code PIN incorrect. 2 tentative(s) restante(s) avant la suspension temporaire."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Accès interdit (Compte suspendu définitivement par l'admin ou bloqué temporairement pendant 30 minutes)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "statut": {
+                                            "type": "string",
+                                            "example": "erreur"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Trop de tentatives échouées. Votre compte est temporairement suspendu pendant 30 minutes."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Erreur de validation (Champs requis manquants ou mal formatés)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "statut": {
+                                            "type": "string",
+                                            "example": "erreur"
+                                        },
+                                        "erreurs": {
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/login/nouvel-appareil/initier": {
+            "post": {
+                "tags": [
+                    "Authentification"
+                ],
+                "summary": "Liaison Étape 1 : Vérification croisée (KYC) et envoi de l'OTP de sécurité",
+                "description": "3. - ÉTAPE 1 : ENREGISTRER UN NOUVEL APPAREIL (Vérification identité globale + Envoi OTP)",
+                "operationId": "authNouvelAppareilInitier",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "telephone",
+                                    "code_pin",
+                                    "email"
+                                ],
+                                "properties": {
+                                    "telephone": {
+                                        "type": "string",
+                                        "example": "771111111"
+                                    },
+                                    "code_pin": {
+                                        "type": "string",
+                                        "example": "1234"
+                                    },
+                                    "email": {
+                                        "type": "string",
+                                        "example": "mamadou.diallo@isi.sn"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Données valides, OTP expédié par mail"
+                    },
+                    "401": {
+                        "description": "Informations d'identité invalides"
+                    }
+                }
+            }
+        },
+        "/login/nouvel-appareil/valider": {
+            "post": {
+                "tags": [
+                    "Authentification"
+                ],
+                "summary": "Liaison Étape 2 : Valider le code OTP et lier l'appareil",
+                "description": "3. - ÉTAPE 2 : VALIDATION DE L'OTP + LIAISON ET CONNEXION FINALE",
+                "operationId": "authNouvelAppareilValider",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "telephone",
+                                    "code_otp",
+                                    "device_id"
+                                ],
+                                "properties": {
+                                    "telephone": {
+                                        "type": "string",
+                                        "example": "771111111"
+                                    },
+                                    "code_otp": {
+                                        "type": "string",
+                                        "example": "123456"
+                                    },
+                                    "device_id": {
+                                        "type": "string",
+                                        "example": "f7b129a0-c3bc"
+                                    },
+                                    "device_name": {
+                                        "type": "string",
+                                        "example": "Infinix Note 40"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Appareil enregistré pour ce compte, token généré"
+                    },
+                    "401": {
+                        "description": "Code OTP invalide ou expiré"
+                    }
+                }
+            }
+        },
+        "/logout": {
+            "post": {
+                "tags": [
+                    "Authentification"
+                ],
+                "summary": "Déconnexion de l'utilisateur connecté",
+                "description": "Révoque et supprime définitivement le jeton d'accès (Token Sanctum) actuellement utilisé pour cette session.",
+                "operationId": "authLogout",
+                "responses": {
+                    "200": {
+                        "description": "Déconnexion réussie et jeton révoqué",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "statut": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Déconnexion réussie. Jeton révoqué avec succès."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Non authentifié (Token manquant, expiré ou invalide)"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/recuperation/verifier-identite": {
+            "post": {
+                "tags": [
+                    "Récupération de compte"
+                ],
+                "summary": "PIN oublié Étape 1 : Audit des habitudes financières",
+                "description": "Vérifie l'identité du client via ses habitudes de transactions et sa question secrète. Accessible uniquement depuis un appareil déjà enregistré. En cas de succès, retourne un ticket d'autorisation valide 5 minutes.",
+                "operationId": "recuperationVerifierIdentite",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "telephone",
+                                    "device_id",
+                                    "montant_derniere_tx",
+                                    "contact_frequent"
+                                ],
+                                "properties": {
+                                    "telephone": {
+                                        "type": "string",
+                                        "example": "771111111"
+                                    },
+                                    "device_id": {
+                                        "type": "string",
+                                        "example": "f7b129a0-c3bc"
+                                    },
+                                    "montant_derniere_tx": {
+                                        "description": "Montant exact de la toute dernière transaction",
+                                        "type": "number",
+                                        "example": 15000
+                                    },
+                                    "contact_frequent": {
+                                        "description": "Numéro ou nom du contact avec qui vous avez le plus de transactions (envoi ET réception)",
+                                        "type": "string",
+                                        "example": "771234567"
+                                    },
+                                    "reponse_secrete": {
+                                        "description": "Requis uniquement si une question secrète a été configurée",
+                                        "type": "string",
+                                        "example": "Dakar",
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Identité confirmée, ticket d'autorisation généré"
+                    },
+                    "400": {
+                        "description": "Réponses incorrectes ou appareil non autorisé"
+                    },
+                    "404": {
+                        "description": "Compte introuvable"
+                    }
+                }
+            }
+        },
+        "/recuperation/reinitialiser-pin": {
+            "post": {
+                "tags": [
+                    "Récupération de compte"
+                ],
+                "summary": "PIN oublié Étape 2 : Réinitialiser le code PIN",
+                "description": "Applique le nouveau code PIN après validation du ticket d'autorisation obtenu à l'étape 1. Le ticket est à usage unique et expire dans 5 minutes.",
+                "operationId": "recuperationReinitialiserPin",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "telephone",
+                                    "ticket",
+                                    "nouveau_pin",
+                                    "nouveau_pin_confirmation"
+                                ],
+                                "properties": {
+                                    "telephone": {
+                                        "type": "string",
+                                        "example": "771111111"
+                                    },
+                                    "ticket": {
+                                        "description": "Ticket reçu à l'étape 1",
+                                        "type": "string",
+                                        "example": "482910"
+                                    },
+                                    "nouveau_pin": {
+                                        "description": "Nouveau code PIN à 4 chiffres",
+                                        "type": "string",
+                                        "example": "4321"
+                                    },
+                                    "nouveau_pin_confirmation": {
+                                        "description": "Confirmation du nouveau code PIN",
+                                        "type": "string",
+                                        "example": "4321"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Code PIN réinitialisé avec succès"
+                    },
+                    "400": {
+                        "description": "Ticket invalide ou expiré"
+                    },
+                    "422": {
+                        "description": "Erreur de validation"
+                    }
+                }
             }
         },
         "/client/fidelite/solde": {
@@ -1227,425 +2095,6 @@
                     }
                 ]
             }
-        },
-        "/inscription": {
-            "post": {
-                "tags": [
-                    "Authentification"
-                ],
-                "summary": "Inscription d'un nouveau client",
-                "description": "0. INSCRIPTION AUTONOME DU CLIENT (Application Mobile Futter)",
-                "operationId": "authInscription",
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "required": [
-                                    "prenom",
-                                    "nom",
-                                    "telephone",
-                                    "email",
-                                    "code_pin"
-                                ],
-                                "properties": {
-                                    "prenom": {
-                                        "type": "string",
-                                        "example": "Mamadou"
-                                    },
-                                    "nom": {
-                                        "type": "string",
-                                        "example": "Diallo"
-                                    },
-                                    "telephone": {
-                                        "type": "string",
-                                        "example": "+221771234567"
-                                    },
-                                    "email": {
-                                        "type": "string",
-                                        "format": "email",
-                                        "example": "mamadou.diallo@isi.sn"
-                                    },
-                                    "code_pin": {
-                                        "type": "string",
-                                        "example": "1234"
-                                    },
-                                    "question_secrete": {
-                                        "type": "string",
-                                        "example": "Votre ville natale ?",
-                                        "nullable": true
-                                    },
-                                    "response_secrete": {
-                                        "type": "string",
-                                        "example": "Dakar",
-                                        "nullable": true
-                                    }
-                                },
-                                "type": "object"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "201": {
-                        "description": "Compte créé avec succès"
-                    },
-                    "422": {
-                        "description": "Erreur de validation"
-                    }
-                }
-            }
-        },
-        "/auth/verifier-appareil": {
-            "post": {
-                "tags": [
-                    "Authentification"
-                ],
-                "summary": "Étape 0 : Vérifier la liaison entre le numéro et cet appareil",
-                "description": "1. VERIFICATION CROISEE COMPTE / APPAREIL (Au démarrage de flutter)",
-                "operationId": "authCheckDeviceUserMatch",
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "required": [
-                                    "telephone",
-                                    "device_id"
-                                ],
-                                "properties": {
-                                    "telephone": {
-                                        "type": "string",
-                                        "example": "771111111"
-                                    },
-                                    "device_id": {
-                                        "type": "string",
-                                        "example": "f7b129a0-c3bc"
-                                    }
-                                },
-                                "type": "object"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "Appareil déjà lié, afficher écran PIN normal"
-                    },
-                    "202": {
-                        "description": "Nouvel appareil détecté, rediriger vers authentification forte"
-                    },
-                    "404": {
-                        "description": "Numéro de téléphone inconnu"
-                    }
-                }
-            }
-        },
-        "/login": {
-            "post": {
-                "tags": [
-                    "Authentification"
-                ],
-                "summary": "Connexion classique (Pour appareils validés)",
-                "description": "2. CONNEXION DU CLIENT OU DE L'ADMIN sur un appareil connue (Code PIN)",
-                "operationId": "authLoginNormal",
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "required": [
-                                    "telephone",
-                                    "code_pin",
-                                    "device_id"
-                                ],
-                                "properties": {
-                                    "telephone": {
-                                        "type": "string",
-                                        "example": "771111111"
-                                    },
-                                    "code_pin": {
-                                        "type": "string",
-                                        "example": "1234"
-                                    },
-                                    "device_id": {
-                                        "type": "string",
-                                        "example": "f7b129a0-c3bc"
-                                    }
-                                },
-                                "type": "object"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "Connexion accordée"
-                    },
-                    "401": {
-                        "description": "PIN incorrect ou appareil interdit"
-                    }
-                }
-            }
-        },
-        "/login/nouvel-appareil/initier": {
-            "post": {
-                "tags": [
-                    "Authentification"
-                ],
-                "summary": "Liaison Étape 1 : Vérification croisée (KYC) et envoi de l'OTP de sécurité",
-                "description": "3. - ÉTAPE 1 : ENREGISTRER UN NOUVEL APPAREIL (Vérification identité globale + Envoi OTP)",
-                "operationId": "authNouvelAppareilInitier",
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "required": [
-                                    "telephone",
-                                    "code_pin",
-                                    "email"
-                                ],
-                                "properties": {
-                                    "telephone": {
-                                        "type": "string",
-                                        "example": "771111111"
-                                    },
-                                    "code_pin": {
-                                        "type": "string",
-                                        "example": "1234"
-                                    },
-                                    "email": {
-                                        "type": "string",
-                                        "example": "mamadou.diallo@isi.sn"
-                                    }
-                                },
-                                "type": "object"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "Données valides, OTP expédié par mail"
-                    },
-                    "401": {
-                        "description": "Informations d'identité invalides"
-                    }
-                }
-            }
-        },
-        "/login/nouvel-appareil/valider": {
-            "post": {
-                "tags": [
-                    "Authentification"
-                ],
-                "summary": "Liaison Étape 2 : Valider le code OTP et lier l'appareil",
-                "description": "3. - ÉTAPE 2 : VALIDATION DE L'OTP + LIAISON ET CONNEXION FINALE",
-                "operationId": "authNouvelAppareilValider",
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "required": [
-                                    "telephone",
-                                    "code_otp",
-                                    "device_id"
-                                ],
-                                "properties": {
-                                    "telephone": {
-                                        "type": "string",
-                                        "example": "771111111"
-                                    },
-                                    "code_otp": {
-                                        "type": "string",
-                                        "example": "123456"
-                                    },
-                                    "device_id": {
-                                        "type": "string",
-                                        "example": "f7b129a0-c3bc"
-                                    },
-                                    "device_name": {
-                                        "type": "string",
-                                        "example": "Infinix Note 40"
-                                    }
-                                },
-                                "type": "object"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "Appareil enregistré pour ce compte, token généré"
-                    },
-                    "401": {
-                        "description": "Code OTP invalide ou expiré"
-                    }
-                }
-            }
-        },
-        "/logout": {
-            "post": {
-                "tags": [
-                    "Authentification"
-                ],
-                "summary": "Déconnexion de l'utilisateur connecté",
-                "description": "Révoque et supprime définitivement le jeton d'accès (Token Sanctum) actuellement utilisé pour cette session.",
-                "operationId": "authLogout",
-                "responses": {
-                    "200": {
-                        "description": "Déconnexion réussie et jeton révoqué",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "statut": {
-                                            "type": "boolean",
-                                            "example": true
-                                        },
-                                        "message": {
-                                            "type": "string",
-                                            "example": "Déconnexion réussie. Jeton révoqué avec succès."
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Non authentifié (Token manquant, expiré ou invalide)"
-                    }
-                },
-                "security": [
-                    {
-                        "sanctum": []
-                    }
-                ]
-            }
-        },
-        "/recuperation/verifier-identite": {
-            "post": {
-                "tags": [
-                    "Récupération de compte"
-                ],
-                "summary": "PIN oublié Étape 1 : Audit des habitudes financières",
-                "description": "Vérifie l'identité du client via ses habitudes de transactions et sa question secrète. Accessible uniquement depuis un appareil déjà enregistré. En cas de succès, retourne un ticket d'autorisation valide 5 minutes.",
-                "operationId": "recuperationVerifierIdentite",
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "required": [
-                                    "telephone",
-                                    "device_id",
-                                    "montant_derniere_tx",
-                                    "contact_frequent"
-                                ],
-                                "properties": {
-                                    "telephone": {
-                                        "type": "string",
-                                        "example": "771111111"
-                                    },
-                                    "device_id": {
-                                        "type": "string",
-                                        "example": "f7b129a0-c3bc"
-                                    },
-                                    "montant_derniere_tx": {
-                                        "description": "Montant exact de la toute dernière transaction",
-                                        "type": "number",
-                                        "example": 15000
-                                    },
-                                    "contact_frequent": {
-                                        "description": "Numéro ou nom du contact avec qui vous avez le plus de transactions (envoi ET réception)",
-                                        "type": "string",
-                                        "example": "771234567"
-                                    },
-                                    "reponse_secrete": {
-                                        "description": "Requis uniquement si une question secrète a été configurée",
-                                        "type": "string",
-                                        "example": "Dakar",
-                                        "nullable": true
-                                    }
-                                },
-                                "type": "object"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "Identité confirmée, ticket d'autorisation généré"
-                    },
-                    "400": {
-                        "description": "Réponses incorrectes ou appareil non autorisé"
-                    },
-                    "404": {
-                        "description": "Compte introuvable"
-                    }
-                }
-            }
-        },
-        "/recuperation/reinitialiser-pin": {
-            "post": {
-                "tags": [
-                    "Récupération de compte"
-                ],
-                "summary": "PIN oublié Étape 2 : Réinitialiser le code PIN",
-                "description": "Applique le nouveau code PIN après validation du ticket d'autorisation obtenu à l'étape 1. Le ticket est à usage unique et expire dans 5 minutes.",
-                "operationId": "recuperationReinitialiserPin",
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "required": [
-                                    "telephone",
-                                    "ticket",
-                                    "nouveau_pin",
-                                    "nouveau_pin_confirmation"
-                                ],
-                                "properties": {
-                                    "telephone": {
-                                        "type": "string",
-                                        "example": "771111111"
-                                    },
-                                    "ticket": {
-                                        "description": "Ticket reçu à l'étape 1",
-                                        "type": "string",
-                                        "example": "482910"
-                                    },
-                                    "nouveau_pin": {
-                                        "description": "Nouveau code PIN à 4 chiffres",
-                                        "type": "string",
-                                        "example": "4321"
-                                    },
-                                    "nouveau_pin_confirmation": {
-                                        "description": "Confirmation du nouveau code PIN",
-                                        "type": "string",
-                                        "example": "4321"
-                                    }
-                                },
-                                "type": "object"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "Code PIN réinitialisé avec succès"
-                    },
-                    "400": {
-                        "description": "Ticket invalide ou expiré"
-                    },
-                    "422": {
-                        "description": "Erreur de validation"
-                    }
-                }
-            }
         }
     },
     "components": {
@@ -1660,12 +2109,28 @@
     },
     "tags": [
         {
+            "name": "Module Admin : Gestion Comptes",
+            "description": "Module Admin : Gestion Comptes"
+        },
+        {
             "name": "Module Admin : Gestion Clients",
             "description": "Module Admin : Gestion Clients"
         },
         {
+            "name": "Module Admin : Supervision",
+            "description": "Module Admin : Supervision"
+        },
+        {
             "name": "Module Admin : Opérations Guichet",
             "description": "Module Admin : Opérations Guichet"
+        },
+        {
+            "name": "Authentification",
+            "description": "Authentification"
+        },
+        {
+            "name": "Récupération de compte",
+            "description": "Récupération de compte"
         },
         {
             "name": "Module Client : Programme de Fidélité",
@@ -1682,14 +2147,6 @@
         {
             "name": "Module Client : Transferts",
             "description": "Module Client : Transferts"
-        },
-        {
-            "name": "Authentification",
-            "description": "Authentification"
-        },
-        {
-            "name": "Récupération de compte",
-            "description": "Récupération de compte"
         }
     ]
 }

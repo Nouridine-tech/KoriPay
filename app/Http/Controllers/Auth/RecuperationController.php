@@ -7,7 +7,6 @@ use App\Models\User;
 use App\Models\Transaction;
 use App\Models\VerificationOtp;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 use OpenApi\Attributes as OA;
@@ -62,7 +61,7 @@ class RecuperationController extends Controller
             'telephone'           => ['required', 'string'],
             'device_id'           => ['required', 'string'],
             'montant_derniere_tx' => ['required', 'numeric'],
-            'contact_frequent'    => ['required', 'string'],
+            'contact_frequent'    => ['nullable', 'string'],
         ]);
         if ($validator->fails()) {
             return response()->json([
@@ -128,6 +127,15 @@ class RecuperationController extends Controller
         // Si le client n'a jamais fait de transfert → on passe cette vérification
         // et on se repose uniquement sur la question secrète (niveau 2)
         if ($contactFrequent) {
+
+            // Si le client a des transactions mais n'a rien envoyé -> refus
+            if (!$request->filled('contact_frequent')) {
+                return response()->json([
+                    'statut' => 'erreur',
+                    'message' => 'Veuillez renseigner le contact avec lequel vous échangez le plus.'
+                ], 400); // Code HTTP 400 : Accès refusé
+            }
+
             // On récupère les informations du contact identifié
             $contact = User::find($contactFrequent->contact_id);
 

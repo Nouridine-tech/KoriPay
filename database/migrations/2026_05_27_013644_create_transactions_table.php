@@ -22,7 +22,7 @@ return new class extends Migration
             $table->decimal('montant', 15, 2);
             $table->decimal('frais', 10, 2)->default(0.00);
             $table->enum('type', ['transfert', 'reception', 'depot', 'retrait']);
-            $table->enum('statut', ['en_attente', 'complete', 'echoue'])->default('en_attente');
+            $table->enum('statut', ['complete', 'annule']);
             $table->timestamps();
         });
     }

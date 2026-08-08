@@ -1,6 +1,6 @@
 <?php
 
-use App\Http\Controllers\auth\AuthController;
+use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Client\TransfertController;
 use Illuminate\Support\Facades\Route;
 
@@ -18,10 +18,10 @@ use Illuminate\Support\Facades\Route;
 // ROUTES PUBLIQUES (Accessibles sans connexion)
 // ========================================================
 
-//Route pour l'inscription autonome du client (Appelée par flutter)
+// Route pour l'inscription autonome du client (Appelée par flutter)
 Route::post('/inscription', [AuthController::class, 'inscription']);
 
-// Vérification croisée (Téléphone / Machine) au lancement de l'application Flutter
+// Route pour la Vérification croisée (Téléphone / Machine) au lancement de l'application Flutter
 Route::post('/auth/verifier-appareil', [AuthController::class, 'verifierEmpreinteAppareil']);
 
 // Route pour la connexion classique (Uniquement autorisée si l'appareil est déjà lié)
@@ -49,10 +49,10 @@ Route::middleware('auth:sanctum')->group(function () {
     /**
      * OPERATIONS CLIENT
      */
-    // Route pour les transferts d'argent entre clients(initier)
+    // Route pour les transferts d'argent entre clients (initier)
     Route::post('/client/transfert/initier', [TransfertController::class, 'initierTransfert']);
 
-    // Route pour les transferts d'argent entre clients(confirmer)
+    // Route pour les transferts d'argent entre clients (confirmer)
     Route::post('/client/transfert/confirmer', [TransfertController::class, 'confirmerTransfert']);
 
     /**
@@ -61,26 +61,56 @@ Route::middleware('auth:sanctum')->group(function () {
     // Routes pour les opérations de dépôt de l'administration
     Route::post('/admin/depot', [\App\Http\Controllers\Admin\OperationGuichetController::class, 'depot']);
 
-    //Routes pour les opérations de retrait de l'administration(initiation)
+    //Routes pour les opérations de retrait de l'administration (initiation)
     Route::post('/admin/retrait/initier', [\App\Http\Controllers\Admin\OperationGuichetController::class, 'initierRetrait']);
 
-    //Routes pour les opérations de retrait de l'administration(confirmation)
+    //Routes pour les opérations de retrait de l'administration (confirmation)
     Route::post('/admin/retrait/confirmer', [\App\Http\Controllers\Admin\OperationGuichetController::class, 'confirmerRetrait']);
 
-    // Routes pour modifier le profile d'un utilisateur en utilisant la methode KYK
+    /**
+     * OPERATION ADMIN : GESTION DES COMPTES
+     */
+    // Routes pour créer un nouveau compte administrateur
+    Route::post('/admin/creer-admin', [\App\Http\Controllers\Admin\AdminController::class, 'creerAdmin']);
+
+    // Route pour lister tous les clients de la plateforme
+    Route::get('/admin/client', [\App\Http\Controllers\Admin\AdminController::class, 'voirTousLesClients']);
+
+    // Route pour voir les détails complets d'un client spécifique
+    Route::get('/admin/clients/{id}', [\App\Http\Controllers\Admin\AdminController::class, 'voirUnClient']);
+
+    // Route pour suspendre totalement un compte client
+    Route::put('/admin/clients/{id}/suspendre', [\App\Http\Controllers\Admin\AdminController::class, 'suspendreCompte']);
+
+    // Route pour geler un compte client
+    Route::put('/admin/clients/{id}/geler', [\App\Http\Controllers\Admin\AdminController::class, 'gelerCompte']);
+
+    // // Route pour réactiver un compte client suspendu ou gelé
+    Route::put('admin/clients/{id}/réactiver', [\App\Http\Controllers\Admin\AdminController::class, 'reactiverCompte']);
+
+    // Routes pour modifier le profile d'un utilisateur en utilisant la methode KYC (Know Your Customer)
     Route::put('/admin/client/modifier-identite', [\App\Http\Controllers\Admin\AdminController::class, 'modifierIdentiteClient']);
 
     /**
-     * OPERATIONS TRANSACTIONS
+     * OPERATION ADMIN : SUPERVISION DES TRANSACTIONS
      */
-    //Routes pour récupérer l'historique des transactions
+    // Route pour voir l'historique global de toutes les transactions de la plateforme
+    Route::get('/admin/transactions', [\App\Http\Controllers\Admin\AdminController::class, 'voirToutesLesTransactions']);
+
+    // Route pour annuler une transaction dans un délai de 7 jours
+    Route::put('/admin/transactions/{reference}/annuler', [\App\Http\Controllers\Admin\AdminController::class, 'annulerTransaction']);
+
+    /**
+     * OPERATIONS TRANSACTIONS CLIENT
+     */
+    // Routes pour récupérer l'historique des transactions
     Route::get('/client/transactions', [\App\Http\Controllers\Client\TransactionController::class, 'index']);
 
-    //Routes pour récupérer le détail d'une seule transaction
+    // Routes pour récupérer le détail d'une seule transaction
     Route::get('/client/transactions/{reference}', [\App\Http\Controllers\Client\TransactionController::class, 'show']);
 
     /**
-     * OPERATIONS FIDELITE
+     * OPERATIONS FIDELITE CLIENT
      */
     // Routes pour les consultations des points de fidélité
     Route::get('/client/fidelite/solde', [\App\Http\Controllers\Client\FideliteController::class, 'monSolde']);

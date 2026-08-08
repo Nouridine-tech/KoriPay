@@ -1,9 +1,10 @@
 <?php
 
-namespace App\Http\Controllers\auth;
+namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Models\Fidelite;
+use App\Models\TentativeConnexion;
 use App\Models\User;
 use App\Models\VerificationOtp;
 use App\Notifications\NouvelAppareilNotification;
@@ -139,7 +140,6 @@ class AuthController extends Controller
             ], 422); // Code HTTP 422 : Données non traitables
         }
 
-
         //1. On cherche d'abord si le client existe dans la BD
         $user = User::where('telephone', $request->telephone)->first();
 
@@ -169,28 +169,68 @@ class AuthController extends Controller
     }
 
     /**
-     * 2. CONNEXION DU CLIENT OU DE L'ADMIN sur un appareil connue (Code PIN)
+     * 2. CONNEXION DU CLIENT OU DE L'ADMIN (Protection Anti-Force Brute)
      */
-
     #[OA\Post(
         path: "/login",
         operationId: "authLoginNormal",
-        summary: "Connexion classique (Pour appareils validés)",
+        summary: "Connexion classique avec protection anti-force brute",
+        description: "Permet d'ouvrir une session utilisateur. Intègre un algorithme glissant sur 5 minutes limitant les échecs consécutifs. Au bout de 3 tentatives infructueuses, le compte est verrouillé automatiquement pendant 30 minutes.",
         tags: ["Authentification"],
         requestBody: new OA\RequestBody(
             required: true,
             content: new OA\JsonContent(
                 required: ["telephone", "code_pin", "device_id"],
                 properties: [
-                    new OA\Property(property: "telephone", type: "string", example: "771111111"),
-                    new OA\Property(property: "code_pin", type: "string", example: "1234"),
-                    new OA\Property(property: "device_id", type: "string", example: "f7b129a0-c3bc")
+                    new OA\Property(property: "telephone", type: "string", example: "771111111", description: "Numéro de téléphone unique servant d'identifiant"),
+                    new OA\Property(property: "code_pin", type: "string", example: "1234", description: "Code secret d'accès à 4 chiffres"),
+                    new OA\Property(property: "device_id", type: "string", example: "f7b129a0-c3bc", description: "Identifiant matériel unique de l'appareil extrait par Flutter")
                 ]
             )
         ),
         responses: [
-            new OA\Response(response: 200, description: "Connexion accordée"),
-            new OA\Response(response: 401, description: "PIN incorrect ou appareil interdit")
+            new OA\Response(
+                response: 200,
+                description: "Authentification réussie, jeton de session émis et timestamps matériels mis à jour",
+                content: new OA\JsonContent(
+                    properties: [
+                        new OA\Property(property: "statut", type: "string", example: "success"),
+                        new OA\Property(property: "message", type: "string", example: "Connexion réussie avec succès."),
+                        new OA\Property(property: "token", type: "string", example: "1|kori_token_session..."),
+                        new OA\Property(property: "user", type: "object", description: "Payload complet de l'utilisateur connecté")
+                    ]
+                )
+            ),
+            new OA\Response(
+                response: 401,
+                description: "Identifiants invalides (Le message indique de manière dynamique le nombre de tentatives restantes)",
+                content: new OA\JsonContent(
+                    properties: [
+                        new OA\Property(property: "statut", type: "string", example: "erreur"),
+                        new OA\Property(property: "message", type: "string", example: "Code PIN incorrect. 2 tentative(s) restante(s) avant la suspension temporaire.")
+                    ]
+                )
+            ),
+            new OA\Response(
+                response: 403,
+                description: "Accès interdit (Compte suspendu définitivement par l'admin ou bloqué temporairement pendant 30 minutes)",
+                content: new OA\JsonContent(
+                    properties: [
+                        new OA\Property(property: "statut", type: "string", example: "erreur"),
+                        new OA\Property(property: "message", type: "string", example: "Trop de tentatives échouées. Votre compte est temporairement suspendu pendant 30 minutes.")
+                    ]
+                )
+            ),
+            new OA\Response(
+                response: 422,
+                description: "Erreur de validation (Champs requis manquants ou mal formatés)",
+                content: new OA\JsonContent(
+                    properties: [
+                        new OA\Property(property: "statut", type: "string", example: "erreur"),
+                        new OA\Property(property: "erreurs", type: "object")
+                    ]
+                )
+            )
         ]
     )]
 
@@ -213,12 +253,77 @@ class AuthController extends Controller
         // Recherche de l'utilisateur par son numéro de téléphone
         $user = User::where('telephone', $request->telephone)->first();
 
+        // SECURITE : Vérification de la suspension temporaire automatique
+        // Avant la vérification du pin pour éviter les ataques par forces brute
+        if ($user) {
+            $tentative = $user->tentativeConnexion;
+
+            if ($tentative && $tentative->suspendu_jusqu_a && now()->lt($tentative->suspendu_jusqu_a)) {
+                // Calcul du temps restant en minutes
+                $minutesRestantes = (int)now()->diffInMinutes($tentative->suspendu_jusqu_a);
+                return response()->json([
+                    'statut' => 'erreur',
+                    'message' => "Trop de tentatives échouées. Compte temporairement suspendu. Réessayez dans {$minutesRestantes} minute(s).",
+                ], 403); // CodeHTTP 403 : Interdit
+            }
+        }
+
         //Sécurité : On vérifie si l'utilisateur existe ET si son code PIN correspond au hash stocké
         if (!$user || !Hash::check($request->code_pin, $user->code_pin)) {
+
+            // On ne gère le compteur que si l'utilisateur existe (téléphone correct, PIN incorrect)
+            if($user) {
+                // Récupération ou création de l'enregistrement de tentatives
+                $tentative = TentativeConnexion::firstOrCreate(['user_id' => $user->id]);
+
+                // LOGIQUE DES TENTATIVES INSTANTANEES :
+                // Si la dernière tentative date de plus de 5 minutes -> on remet le compteur à 0
+                // Seules les tentatives rapides et consécutives déclenche la suspension
+                if ($tentative->derniere_tentative && now()->diffInMinutes($tentative->derniere_tentative) > 5) {
+                    $tentative->tentatives = 0;
+                }
+
+                // Incrémentation du compteur + horodatage de cette tentative
+                $tentative->tentatives += 1;
+                $tentative->derniere_tentative = now();
+
+                // Après 3 tentatives consécutives -> suspension automatique de 30 minutes
+                if ($tentative->tentatives >= 3) {
+                    $tentative->suspendu_jusqu_a = now()->addMinutes(30);
+                    $tentative->tentatives = 0; // Remise à zéro du compteur
+                    $tentative->save();
+
+                    return response()->json([
+                        'statut' => 'erreur',
+                        'message' => "Trop de tentatives échouées. Votre compte est temporairement suspendu pendant 30 minutes.",
+                    ], 403); // Code HTTP 403 : Interdit
+                }
+
+                $tentative->save();
+
+                //On informe le client du nombre de tentatives restantes
+                $tentativesRestantes = 3 - $tentative->tentatives;
+                return response()->json([
+                    'statut' => 'erreur',
+                    'message' => "Code PIN incorrect. {$tentativesRestantes} tentative(s) restante(s) avant la suspension temporaire."
+                ], 401); // Code HTTP 401 : Non autorisé
+            }
+
+            //Téléphone introuvable
             return response()->json([
                 'statut' => 'erreur',
                 'message' => 'Numero ou code PIN incorrect.'
             ], 401); //Code HTTP 401 : Non autorisé
+        }
+
+        // PIN correct -> Réinitialisation du compteur de tentatives
+        $tentative = $user->tentativeConnexion;
+        if ($tentative) {
+            $tentative->update([
+                'tentatives' => 0,
+                'derniere_tentative' => null,
+                'suspendu_jusqu_a' => null,
+            ]);
         }
 
         //Vérification de l'état du compte (Sécurité contre les fraudes)
@@ -235,8 +340,12 @@ class AuthController extends Controller
             return response()->json([
                 'statut' => 'erreur',
                 'message' => 'Accès refusé. Cet appareil doit faire l\'objet d\'une double authentification.'
-            ], 401);
+            ], 401); // Code HTTP 401 : Non autorisé
         }
+
+        // Mise à jour de la date de dernière connexion sur cet appareil
+        $user->devices()->where('device_id', $request->device_id)
+            ->update(['derniere_connexion_le' => now()]);
 
         //Nettoyage : On supprime ses anciens tokens pour éviter l'accumulation
         $user->tokens()->delete();
