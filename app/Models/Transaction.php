@@ -12,6 +12,7 @@ class Transaction extends Model
       'reference',
       'expediteur_id',
       'destinataire_id',
+      'effectue_par_id',
       'montant',
       'frais',
       'type',

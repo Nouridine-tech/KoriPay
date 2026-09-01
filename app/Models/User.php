@@ -4,8 +4,6 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
-use Illuminate\Database\Eloquent\Attributes\Fillable;
-use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
@@ -74,10 +72,10 @@ class User extends Authenticatable
         return $this->hasMany(UserDevice::class);
     }
 
-    // RELATION : Un utilisateur possède un enregistrement de tentatives de connexion
-    // Créé automatiquement à la première tentative échouée via firstOrCreate()
-    public function tentativeConnexion(): HasOne
+    // RELATION : Un utilisateur possède plusieurs enregistrements de tentatives de connexion
+    // Un par type d'action (login, verification_identite, etc.). Créés automatiquement via firstOrCreate()
+    public function tentativesConnexion(): HasMany
     {
-        return $this->hasOne(TentativeConnexion::class, 'user_id');
+        return $this->hasMany(TentativeConnexion::class, 'user_id');
     }
 }

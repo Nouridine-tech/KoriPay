@@ -19,7 +19,7 @@ return new class extends Migration
             $table->string('email')->unique();
             $table->string('code_pin');
             $table->decimal('solde', 15, 2)->default(0.00);
-            $table->enum('role', ['admin', 'client'])->default('client');
+            $table->enum('role', ['admin', 'client', 'agent'])->default('client');
             $table->enum('statut', ['actif', 'suspendu','gele'])->default('actif');
             $table->rememberToken();
             $table->timestamps();

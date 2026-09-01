@@ -11,9 +11,11 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use OpenApi\Attributes as OA;
+use App\Traits\JournaliseAction;
 
 class AdminController extends Controller
 {
+    use JournaliseAction;
 
     /**
      * VERIFICATION DU ROLE ADMIN (Méthode privée réutilisable)
@@ -25,31 +27,32 @@ class AdminController extends Controller
     }
 
     //======================================================
-    // 1. CREATION D'UN NOUVEAU COMPTE ADMIN
+    // 1. CREATION D'UN NOUVEAU COMPTE ADMIN OU AGENT
     //======================================================
 
     #[OA\Post(
         path: "/admin/creer-admin",
         operationId: "adminCreerAdmin",
-        summary: "Créer un nouveau compte administrateur",
-        description: "Permet à un administrateur connecté de créer un nouveau compte admin. Seul un admin peut créer un autre admin.",
+        summary: "Créer un nouveau compte administrateur ou agent",
+        description: "Permet à un administrateur connecté de créer un nouveau compte admin ou agent. Seul un admin peut créer ce type de compte.",
         tags: ["Module Admin : Gestion Comptes"],
         security: [["sanctum" => []]],
         requestBody: new OA\RequestBody(
             required: true,
             content: new OA\JsonContent(
-                required: ["nom", "prenom", "telephone", "email", "code_pin"],
+                required: ["nom", "prenom", "telephone", "email", "code_pin", "role"],
                 properties: [
                     new OA\Property(property: "nom", type: "string", example: "Diop"),
                     new OA\Property(property: "prenom", type: "string", example: "Moussa"),
                     new OA\Property(property: "telephone", type: "string", example: "770000001"),
                     new OA\Property(property: "email", type: "string", example: "moussa.diop@koripay.com"),
                     new OA\Property(property: "code_pin", type: "string", example: "4321"),
+                    new OA\Property(property: "role", type: "string", example: "agent", description: "Doit être 'admin' ou 'agent'"),
                 ]
             )
         ),
         responses: [
-            new OA\Response(response: 201, description: "Compte admin créé avec succès"),
+            new OA\Response(response: 201, description: "Compte créé avec succès"),
             new OA\Response(response: 403, description: "Droits insuffisants"),
             new OA\Response(response: 422, description: "Erreur de validation")
         ]
@@ -73,6 +76,7 @@ class AdminController extends Controller
             'telephone' => ['required', 'string', 'unique:users,telephone'],
             'email' => ['required', 'email', 'unique:users,email'],
             'code_pin' => ['required', 'string', 'digits:4'],
+            'role' => ['required', 'string', 'in:admin,agent'],
         ]);
         if ($validator->fails()) {
             return response()->json([
@@ -81,44 +85,52 @@ class AdminController extends Controller
             ], 422); // Code HTTP 422 : Données non traitables
         }
 
-        // Création du compte admin
-        $admin = User::create([
+        // Création du compte (admin ou agent selon ce qui a été envoyé)
+        $compte = User::create([
             'nom' => $request->nom,
             'prenom' => $request->prenom,
             'telephone' => $request->telephone,
             'email' => $request->email,
             'code_pin' => Hash::make($request->code_pin),
             'solde' => 0.00,
-            'role' => 'admin',
+            'role' => $request->role,
             'statut' => 'actif',
         ]);
+
+        // Journalisation de la création du compte pour traçabilité
+        $this->journaliser($request->user(), self::ACTION_CREATION_ADMIN, $compte);
+
         return response()->json([
             'statut' => 'success',
-            'message' => 'Compte administrateur créé avec succès.',
-            'admin' => $admin
+            'message' => 'Compte '. $request->role . ' créé avec succès.',
+            'compte' => $compte
         ], 201); // Code HTTP 201 : Ressource créée
     }
 
 
 
     //======================================================
-    // 2. VOIR TOUS LES CLIENTS
+    // 2. VOIR TOUS LES COMPTES D'UN TYPE (CLIENT OU AGENT)
     //======================================================
 
     #[OA\Get(
-        path: "/admin/clients",
-        operationId: "adminVoirTousLesClients",
-        summary: "Lister tous les clients de la plateforme",
-        description: "Retourne la liste complète de tous les comptes clients avec leurs informations et statuts.",
-        tags: ["Module Admin : Gestion Clients"],
+        path: "/admin/comptes/{type}",
+        operationId: "adminVoirTousLesComptes",
+        summary: "Lister tous les comptes d'un type donné (client ou agent)",
+        description: "Retourne la liste complète des comptes clients OU des comptes agents, selon le type demandé dans l'URL.",
+        tags: ["Module Admin : Gestion Comptes"],
         security: [["sanctum" => []]],
+        parameters: [
+            new OA\Parameter(name: "type", in: "path", required: true, schema: new OA\Schema(type: "string", enum: ["client", "agent", "admin"]))
+        ],
         responses: [
-            new OA\Response(response: 200, description: "Liste des clients retournée avec succès"),
+            new OA\Response(response: 200, description: "Liste des comptes retournée avec succès"),
             new OA\Response(response: 403, description: "Droits insuffisants")
         ]
     )]
 
-    public function voirTousLesClients(Request $request)
+
+    public function voirTousLesComptes(Request $request, string $type)
     {
         // Sécurité périmétrique sur le rôle
         if (!$this->verifierAdmin($request)) {
@@ -128,42 +140,43 @@ class AdminController extends Controller
             ], 403); // Code HTTP 403 : Interdit
         }
 
-        // Récupération de tous les clients (role = 'client') avec pagination
-        $clients = User::where('role', 'client')
+        // Récupération de tous les comptes de type demandé avec pagination
+        $comptes = User::where('role', $type)
             ->select('id', 'nom', 'prenom', 'telephone', 'email', 'solde', 'statut', 'created_at')
             ->orderBy('created_at', 'desc')
-        ->paginate(20); // 20 clients par page
+        ->paginate(20); // 20 comptes par page
 
         return response()->json([
             'statut' => 'success',
-            'donnees' => $clients
+            'donnees' => $comptes
         ], 200); // Code HTTP 200 : OK
     }
 
 
 
     //================================================================
-    // 3. VOIR LES DETAILS D'UN CLIENT
+    // 3. VOIR LES DETAILS D'UN COMPTE (CLIENT OU AGENT)
     //================================================================
 
     #[OA\Get(
-        path: "/admin/clients/{id}",
-        operationId: "adminVoirUnClient",
-        summary: "Voir les informations détaillées d'un client",
-        description: "Retourne toutes les informations d'un client spécifique, incluant son solde, ses points de fidélité et son historique de transactions.",
-        tags: ["Module Admin : Gestion Clients"],
+        path: "/admin/comptes/{type}/{id}",
+        operationId: "adminVoirUnCompte",
+        summary: "Voir les informations détaillées d'un compte (client ou agent)",
+        description: "Retourne toutes les informations d'un compte spécifique du type demandé.",
+        tags: ["Module Admin : Gestion Comptes"],
         security: [["sanctum" => []]],
         parameters: [
+            new OA\Parameter(name: "type", in: "path", required: true, schema: new OA\Schema(type: "string", enum: ["client", "agent", "admin"])),
             new OA\Parameter(name: "id", in: "path", required: true, schema: new OA\Schema(type: "integer"), example: 2)
         ],
         responses: [
-            new OA\Response(response: 200, description: "Informations client retournées"),
+            new OA\Response(response: 200, description: "Informations du compte retournées"),
             new OA\Response(response: 403, description: "Droits insuffisants"),
-            new OA\Response(response: 404, description: "Client introuvable")
+            new OA\Response(response: 404, description: "Compte introuvable")
         ]
     )]
 
-    public function voirUnClient(Request $request, $id)
+    public function voirUnCompte(Request $request, string $type, $id)
     {
         // Sécurité périmétrique de rôle
         if (!$this->verifierAdmin($request)) {
@@ -173,20 +186,20 @@ class AdminController extends Controller
             ], 403); // Code HTTP 403 : Interdit
         }
 
-        // Recherche du client avec ses relations
-        $client = User::where('id', $id)
-            ->where('role', 'client')
+        // Recherche du compte avec ses relations
+        $compte = User::where('id', $id)
+            ->where('role', $type)
             ->with('fidelite') // Charge les points de fidélité
         ->first();
 
-        if (!$client) {
+        if (!$compte) {
             return response()->json([
                 'statut' => 'erreur',
-                'message' => 'Client introuvable.'
-            ], 404); // Code HTTP 404 : Not founf
+                'message' => ucfirst($type) . ' introuvable.'
+            ], 404); // Code HTTP 404 : Not found
         }
 
-        // Récupération des 10 dernières transactions du client
+        // Récupération des 10 dernières transactions liées à ce compte
         $derniereTransactions = Transaction::where(function ($query) use ($id) {
             $query->where('expediteur_id', $id)
                 ->orWhere('destinataire_id', $id);
@@ -195,7 +208,7 @@ class AdminController extends Controller
         return response()->json([
             'statut' => 'success',
             'donnees' => [
-                'client' => $client,
+                'compte' => $compte,
                 'derniereTransactions' => $derniereTransactions
             ]
         ], 200); // Code HTTP 200 : OK
@@ -247,17 +260,18 @@ class AdminController extends Controller
 
 
     //================================================================
-    // 5. SUSPENDRE UN COMPTE
+    // 5. SUSPENDRE UN COMPTE (CLIENT OU AGENT)
     //================================================================
 
     #[OA\Put(
-        path: "/admin/clients/{id}/suspendre",
+        path: "/admin/comptes/{type}/{id}/suspendre",
         operationId: "adminSuspendreCompte",
-        summary: "Suspendre le compte d'un client",
-        description: "Bloque totalement l'accès au compte d'un client. Le client ne peut plus se connecter, envoyer ni recevoir d'argent.",
-        tags: ["Module Admin : Gestion Clients"],
+        summary: "Suspendre un compte (client ou agent)",
+        description: "Bloque totalement l'accès au compte. Il ne peut plus se connecter ni effectuer aucune opération.",
+        tags: ["Module Admin : Gestion Comptes"],
         security: [["sanctum" => []]],
         parameters: [
+            new OA\Parameter(name: "type", in: "path", required: true, schema: new OA\Schema(type: "string", enum: ["client", "agent"])),
             new OA\Parameter(name: "id", in: "path", required: true, schema: new OA\Schema(type: "integer"), example: 2)
         ],
         requestBody: new OA\RequestBody(
@@ -272,12 +286,12 @@ class AdminController extends Controller
         responses: [
             new OA\Response(response: 200, description: "Compte suspendu avec succès"),
             new OA\Response(response: 403, description: "Droits insuffisants"),
-            new OA\Response(response: 404, description: "Client introuvable"),
+            new OA\Response(response: 404, description: "Compte introuvable"),
             new OA\Response(response: 400, description: "Compte déjà suspendu")
         ]
     )]
 
-    public function suspendreCompte(Request $request, $id)
+    public function suspendreCompte(Request $request, string $type, $id)
     {
         // Sécurité périmétrique de rôle
         if (!$this->verifierAdmin($request)) {
@@ -287,19 +301,30 @@ class AdminController extends Controller
             ], 403); // Code HTTP 403 : Interdit
         }
 
-        // Vérification si le client existe
-        $client = User::where('id', $id)
-            ->where('role', 'client')
-        ->first();
-        if (!$client) {
+        // Validation du motif obligatoire
+        $validateur = Validator::make($request->all(), [
+            'motif' => ['required', 'string', 'max:255'],
+        ]);
+        if ($validateur->fails()) {
             return response()->json([
                 'statut' => 'erreur',
-                'message' => 'Client introuvable.'
+                'erreurs' => $validateur->errors()
+            ], 422); // Code HTTP 422 : Entité non traitée
+        }
+
+        // Vérification si le compte existe
+        $compte = User::where('id', $id)
+            ->where('role', $type)
+        ->first();
+        if (!$compte) {
+            return response()->json([
+                'statut' => 'erreur',
+                'message' => ucfirst($type) . ' introuvable.'
             ], 404); // Code HTTP 404 : Not found
         }
 
         // Vérification si le compte est déjà suspendu
-        if ($client->statut === 'suspendu') {
+        if ($compte->statut === 'suspendu') {
             return response()->json([
                 'statut' => 'erreur',
                 'message' => 'Ce compte est déjà suspendu.'
@@ -307,32 +332,36 @@ class AdminController extends Controller
         }
 
         // Suspension du compte
-        $client->update([
+        $compte->update([
             'statut' => 'suspendu'
         ]);
 
         // Révocation de tous ses tokens actifs pour forcer la déconnexion immédiate
-        $client->tokens()->delete();
+        $compte->tokens()->delete();
+
+        // Journalisation de la suspension d'un compte avec le motif fourni par l'admin
+        $this->journaliser($request->user(), self::ACTION_SUSPENSION_COMPTE, $compte, $request->motif);
 
         return response()->json([
             'statut' => 'success',
-            'message' => 'Compte client suspendu avec succès.'
+            'message' => ucfirst($type) . ' suspendu avec succès.'
         ], 200); // Code HTTP 200 : OK
     }
 
 
     //================================================================
-    // 6. GELER UN COMPTE CLIENT
+    // 6. GELER UN COMPTE (CLIENT OU AGENT)
     //================================================================
 
     #[OA\Put(
-        path: "/admin/clients/{id}/geler",
+        path: "/admin/comptes/{type}/{id}/geler",
         operationId: "adminGelerCompte",
-        summary: "Geler le compte d'un client",
-        description: "Bloque uniquement les transferts sortants du compte. Le client peut toujours se connecter, voir son solde et recevoir de l'argent. Utilisé en cas de suspicion d'arnaque en cours.",
-        tags: ["Module Admin : Gestion Clients"],
+        summary: "Geler un compte (client ou agent)",
+        description: "Bloque uniquement les transferts sortants du compte. Utilisé en cas de suspicion d'arnaque en cours.",
+        tags: ["Module Admin : Gestion Comptes"],
         security: [["sanctum" => []]],
         parameters: [
+            new OA\Parameter(name: "type", in: "path", required: true, schema: new OA\Schema(type: "string", enum: ["client", "agent"])),
             new OA\Parameter(name: "id", in: "path", required: true, schema: new OA\Schema(type: "integer"), example: 2)
         ],
         requestBody: new OA\RequestBody(
@@ -347,12 +376,12 @@ class AdminController extends Controller
         responses: [
             new OA\Response(response: 200, description: "Compte gelé avec succès"),
             new OA\Response(response: 403, description: "Droits insuffisants"),
-            new OA\Response(response: 404, description: "Client introuvable"),
+            new OA\Response(response: 404, description: "Compte introuvable"),
             new OA\Response(response: 400, description: "Compte déjà gelé ou suspendu")
         ]
     )]
 
-    public function gelerCompte(Request $request, $id)
+    public function gelerCompte(Request $request, string $type, $id)
     {
         // Sécurité périmétrique de rôle
         if (!$this->verifierAdmin($request)) {
@@ -362,19 +391,30 @@ class AdminController extends Controller
             ], 403); // Code HTTP 403 : Interdit
         }
 
-        // Vérification si le client existe
-        $client = User::where('id', $id)
-            ->where('role', 'client')
-            ->first();
-        if (!$client) {
+        // Validation du motif obligatoire
+        $validateur = Validator::make($request->all(), [
+            'motif' => ['required', 'string', 'max:255'],
+        ]);
+        if ($validateur->fails()) {
             return response()->json([
                 'statut' => 'erreur',
-                'message' => 'Client introuvable.'
+                'erreurs' => $validateur->errors()
+            ], 422); // Code HTTP 422 : Entité non traitée
+        }
+
+        // Vérification si le compte existe
+        $compte = User::where('id', $id)
+            ->where('role', $type)
+            ->first();
+        if (!$compte) {
+            return response()->json([
+                'statut' => 'erreur',
+                'message' => ucfirst($type) . ' introuvable.'
             ], 404); // Code HTTP 404 : Not found
         }
 
         // Vérification si le compte est déjà suspendu
-        if (in_array($client->statut, ['gele', 'suspendu'])) {
+        if (in_array($compte->statut, ['gele', 'suspendu'])) {
             return response()->json([
                 'statut' => 'erreur',
                 'message' => 'Ce compte est déjà gelé ou suspendu.'
@@ -382,13 +422,16 @@ class AdminController extends Controller
         }
 
         // Gel du compte
-        $client->update([
+        $compte->update([
             'statut' => 'gele'
         ]);
 
+        // Journalisation du gel d'un compte avec le motif fourni par l'admin
+        $this->journaliser($request->user(), self::ACTION_GEL_COMPTE, $compte, $request->motif);
+
         return response()->json([
             'statut' => 'success',
-            'message' => 'Compte gelé avec succès.'
+            'message' => ucfirst($type) . ' gelé avec succès.'
         ], 200); // Code HTTP 200 : OK
     }
 
@@ -398,24 +441,25 @@ class AdminController extends Controller
     //================================================================
 
     #[OA\Put(
-        path: "/admin/clients/{id}/reactiver",
+        path: "/admin/comptes/{type}/{id}/reactiver",
         operationId: "adminReactiverCompte",
-        summary: "Réactiver un compte client suspendu ou gelé",
-        description: "Rétablit l'accès complet au compte d'un client après vérification et résolution du problème ayant motivé la suspension ou le gel.",
-        tags: ["Module Admin : Gestion Clients"],
+        summary: "Réactiver un compte suspendu ou gelé (client ou agent)",
+        description: "Rétablit l'accès complet au compte après vérification et résolution du problème.",
+        tags: ["Module Admin : Gestion Comptes"],
         security: [["sanctum" => []]],
         parameters: [
+            new OA\Parameter(name: "type", in: "path", required: true, schema: new OA\Schema(type: "string", enum: ["client", "agent"])),
             new OA\Parameter(name: "id", in: "path", required: true, schema: new OA\Schema(type: "integer"), example: 2)
         ],
         responses: [
             new OA\Response(response: 200, description: "Compte réactivé avec succès"),
             new OA\Response(response: 403, description: "Droits insuffisants"),
-            new OA\Response(response: 404, description: "Client introuvable"),
+            new OA\Response(response: 404, description: "Compte introuvable"),
             new OA\Response(response: 400, description: "Compte déjà actif")
         ]
     )]
 
-    public function reactiverCompte(Request $request, $id)
+    public function reactiverCompte(Request $request, string $type, $id)
     {
 
         // Sécurité périmétrique de rôle
@@ -426,19 +470,19 @@ class AdminController extends Controller
             ], 403); // Code HTTP 403 : Interdit
         }
 
-        // Vérification si le client existe
-        $client = User::where('id', $id)
-            ->where('role', 'client')
+        // Vérification si le compte existe
+        $compte = User::where('id', $id)
+            ->where('role', $type)
             ->first();
-        if (!$client) {
+        if (!$compte) {
             return response()->json([
                 'statut' => 'erreur',
-                'message' => 'Client introuvable.'
+                'message' => ucfirst($type) . ' introuvable.'
             ], 404); // Code HTTP 404 : Not found
         }
 
         // Vérification si le compte est déjà actif
-        if ($client->statut === 'actif') {
+        if ($compte->statut === 'actif') {
             return response()->json([
                 'statut' => 'erreur',
                 'message' => 'Ce compte est déjà actif.'
@@ -446,13 +490,16 @@ class AdminController extends Controller
         }
 
         // Réactivation du compte
-        $client->update([
+        $compte->update([
             'statut' => 'actif'
         ]);
 
+        // Journalisation de la reactivation d'un compte avec le motif fourni par l'admin
+        $this->journaliser($request->user(), self::ACTION_REACTIVATION_COMPTE, $compte);
+
         return response()->json([
             'statut' => 'success',
-            'message' => 'Compte client réactivé avec succès.'
+            'message' => ucfirst($type) . ' réactivé avec succès.'
         ], 200); // Code HTTP 200 : OK
 
     }
@@ -497,6 +544,17 @@ class AdminController extends Controller
                 'statut' => 'erreur',
                 'message' => 'Action non autorisée. Droits administratifs requis.'
             ], 403); // Code HTTP 403 : Interdit
+        }
+
+        // Validation du motif obligatoire
+        $validateur = Validator::make($request->all(), [
+            'motif' => ['required', 'string', 'max:255'],
+        ]);
+        if ($validateur->fails()) {
+            return response()->json([
+                'statut' => 'erreur',
+                'erreurs' => $validateur->errors()
+            ], 422); // Code HTTP 422 : Entité non traitée
         }
 
         //On cherche la transaction de type 'transfert' uniquement
@@ -592,6 +650,9 @@ class AdminController extends Controller
                 Log::error("Notification annulation échouée : ". $e->getMessage());
             }
 
+            // Journalisation de l'annulation d'une transaction avec le motif fourni par l'admin
+            $this->journaliser($request->user(), self::ACTION_ANNULATION_TRANSACTION, $transaction, $request->motif);
+
             return response()->json([
                 'statut' => 'success',
                 'message' => 'Transaction annulée avec succès. L\'expéditeur a été remboursé du montant et des frais.',
@@ -681,6 +742,9 @@ class AdminController extends Controller
             'nom' => $request->nom,
             'prenom' => $request->prenom
         ]);
+
+        // Journalisation de la modification d'identité pour traçabilité (conformité réglementaire KYC)
+        $this->journaliser($request->user(), self::ACTION_MODIFICATION_IDENTITE_CLIENT, $client);
 
         return response()->json([
             'statut' => 'success',

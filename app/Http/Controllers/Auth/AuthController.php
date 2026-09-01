@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Models\Fidelite;
-use App\Models\TentativeConnexion;
 use App\Models\User;
 use App\Models\VerificationOtp;
 use App\Notifications\NouvelAppareilNotification;
@@ -13,9 +12,11 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 use OpenApi\Attributes as OA;
+use App\Traits\GereTentativesConnexion;
 
 class AuthController extends Controller
 {
+    use GereTentativesConnexion;
     /**
      * 0. INSCRIPTION AUTONOME DU CLIENT (Application Mobile Futter)
      */
@@ -256,15 +257,9 @@ class AuthController extends Controller
         // SECURITE : Vérification de la suspension temporaire automatique
         // Avant la vérification du pin pour éviter les ataques par forces brute
         if ($user) {
-            $tentative = $user->tentativeConnexion;
-
-            if ($tentative && $tentative->suspendu_jusqu_a && now()->lt($tentative->suspendu_jusqu_a)) {
-                // Calcul du temps restant en minutes
-                $minutesRestantes = (int)now()->diffInMinutes($tentative->suspendu_jusqu_a);
-                return response()->json([
-                    'statut' => 'erreur',
-                    'message' => "Trop de tentatives échouées. Compte temporairement suspendu. Réessayez dans {$minutesRestantes} minute(s).",
-                ], 403); // CodeHTTP 403 : Interdit
+            $reponseSuspension = $this->verifierSuspension($user, self::ACTION_LOGIN);
+            if ($reponseSuspension) {
+                return $reponseSuspension;
             }
         }
 
@@ -273,40 +268,7 @@ class AuthController extends Controller
 
             // On ne gère le compteur que si l'utilisateur existe (téléphone correct, PIN incorrect)
             if($user) {
-                // Récupération ou création de l'enregistrement de tentatives
-                $tentative = TentativeConnexion::firstOrCreate(['user_id' => $user->id]);
-
-                // LOGIQUE DES TENTATIVES INSTANTANEES :
-                // Si la dernière tentative date de plus de 5 minutes -> on remet le compteur à 0
-                // Seules les tentatives rapides et consécutives déclenche la suspension
-                if ($tentative->derniere_tentative && now()->diffInMinutes($tentative->derniere_tentative) > 5) {
-                    $tentative->tentatives = 0;
-                }
-
-                // Incrémentation du compteur + horodatage de cette tentative
-                $tentative->tentatives += 1;
-                $tentative->derniere_tentative = now();
-
-                // Après 3 tentatives consécutives -> suspension automatique de 30 minutes
-                if ($tentative->tentatives >= 3) {
-                    $tentative->suspendu_jusqu_a = now()->addMinutes(30);
-                    $tentative->tentatives = 0; // Remise à zéro du compteur
-                    $tentative->save();
-
-                    return response()->json([
-                        'statut' => 'erreur',
-                        'message' => "Trop de tentatives échouées. Votre compte est temporairement suspendu pendant 30 minutes.",
-                    ], 403); // Code HTTP 403 : Interdit
-                }
-
-                $tentative->save();
-
-                //On informe le client du nombre de tentatives restantes
-                $tentativesRestantes = 3 - $tentative->tentatives;
-                return response()->json([
-                    'statut' => 'erreur',
-                    'message' => "Code PIN incorrect. {$tentativesRestantes} tentative(s) restante(s) avant la suspension temporaire."
-                ], 401); // Code HTTP 401 : Non autorisé
+                return $this->enregistrerEchec($user, self::ACTION_LOGIN, 'Code PIN incorrect.');
             }
 
             //Téléphone introuvable
@@ -317,14 +279,7 @@ class AuthController extends Controller
         }
 
         // PIN correct -> Réinitialisation du compteur de tentatives
-        $tentative = $user->tentativeConnexion;
-        if ($tentative) {
-            $tentative->update([
-                'tentatives' => 0,
-                'derniere_tentative' => null,
-                'suspendu_jusqu_a' => null,
-            ]);
-        }
+        $this->reinitialiserTentatives($user, self::ACTION_LOGIN);
 
         //Vérification de l'état du compte (Sécurité contre les fraudes)
         if ($user->statut === 'suspendu'){
@@ -368,6 +323,7 @@ class AuthController extends Controller
         path: "/login/nouvel-appareil/initier",
         operationId: "authNouvelAppareilInitier",
         summary: "Liaison Étape 1 : Vérification croisée (KYC) et envoi de l'OTP de sécurité",
+        description: "Vérifie le téléphone, l'email et le code PIN du client avant d'envoyer l'OTP. Utilise le même compteur anti-bruteforce que /login, car le PIN vérifié est le même secret.",
         tags: ["Authentification"],
         requestBody: new OA\RequestBody(
             required: true,
@@ -382,7 +338,9 @@ class AuthController extends Controller
         ),
         responses: [
             new OA\Response(response: 200, description: "Données valides, OTP expédié par mail"),
-            new OA\Response(response: 401, description: "Informations d'identité invalides")
+            new OA\Response(response: 401, description: "Informations d'identité invalides - indique le nombre de tentatives restantes avant suspension"),
+            new OA\Response(response: 403, description: "Compte temporairement suspendu suite à 3 échecs consécutifs (compteur partagé avec /login)"),
+            new OA\Response(response: 422, description: "Erreur de validation")
         ]
     )]
 
@@ -406,12 +364,28 @@ class AuthController extends Controller
         $user = User::where('telephone', $request->telephone)
             ->where('email', $request->email)
             ->first();
+
+        if($user){
+            $reponseSuspension = $this->verifierSuspension($user, self::ACTION_LOGIN);
+            if ($reponseSuspension) {
+                return $reponseSuspension;
+            }
+        }
+
         if (!$user || !Hash::check($request->code_pin, $user->code_pin)) {
+
+            if($user) {
+                return $this->enregistrerEchec($user, self::ACTION_LOGIN, 'Les informations d\'identité fournies ne correspondent pas.');
+            }
+
             return response()->json([
                 'statut' => 'erreur',
                 'message' => 'Les informations d\'identité fournies ne correspondent pas.'
-            ], 401); //Code HTTP 401 : Entités non traitées
+            ], 401); //Code HTTP 401 : Bad request
         }
+
+        // PIN et identité corrects -> réinitialisation du compteur de tentatives
+        $this->reinitialiserTentatives($user, self::ACTION_LOGIN);
 
         // Génération du code OTP secret à 6 chiffres
         $codeOtp = (string) random_int(100000, 999999);
@@ -442,6 +416,7 @@ class AuthController extends Controller
         path: "/login/nouvel-appareil/valider",
         operationId: "authNouvelAppareilValider",
         summary: "Liaison Étape 2 : Valider le code OTP et lier l'appareil",
+        description: "Vérifie le code OTP reçu par e-mail et finalise la liaison de l'appareil. Après 3 échecs consécutifs, le compte est temporairement suspendu 30 minutes.",
         tags: ["Authentification"],
         requestBody: new OA\RequestBody(required: true,content:
             new OA\JsonContent(required: ["telephone", "code_otp", "device_id"],
@@ -449,8 +424,13 @@ class AuthController extends Controller
                     new OA\Property(property: "code_otp", type: "string", example: "123456"),
                     new OA\Property(property: "device_id", type: "string", example: "f7b129a0-c3bc"),
                     new OA\Property(property: "device_name", type: "string", example: "Infinix Note 40")])),
-        responses: [new OA\Response(response: 200, description: "Appareil enregistré pour ce compte, token généré"),
-            new OA\Response(response: 401, description: "Code OTP invalide ou expiré")]
+        responses: [
+            new OA\Response(response: 200, description: "Appareil enregistré pour ce compte, token généré"),
+            new OA\Response(response: 401, description: "Code OTP invalide ou expiré - indique le nombre de tentatives restantes avant suspension"),
+            new OA\Response(response: 403, description: "Compte temporairement suspendu suite à 3 échecs consécutifs"),
+            new OA\Response(response: 404, description: "Utilisateur introuvable"),
+            new OA\Response(response: 422, description: "Erreur de validation")
+        ]
     )]
     public function validerNouvelAppareil(Request $request)
     {
@@ -475,6 +455,12 @@ class AuthController extends Controller
             ],404);// Code HTTP 404 : Not Found
         }
 
+        // Vérification de la suspension temporaire automatique suite à des échecs
+        $reponseSuspension = $this->verifierSuspension($user, self::ACTION_NOUVEL_APPAREIL);
+        if ($reponseSuspension) {
+            return $reponseSuspension;
+        }
+
         // Recherche du jeton OTP en base de données
         $otpRecord = VerificationOtp::where('user_id', $user->id)
             ->where('otp', $request->code_otp)
@@ -482,11 +468,11 @@ class AuthController extends Controller
             ->where('est_utilise', false)
             ->latest()->first();
         if (!$otpRecord || $otpRecord->expire_a->isPast()) {
-            return response()->json([
-                'statut' => 'erreur',
-                'message' => 'Code OTP invalide ou expiré.'
-            ],401); //Code HTTP 401 : Entités non traitées
+            return $this->enregistrerEchec($user, self::ACTION_NOUVEL_APPAREIL, 'Code OTP invalide ou expiré.');
         }
+
+        // Toutes les vérifications sont passées -> réinitialisation du compteur de tentatives
+        $this->reinitialiserTentatives($user, self::ACTION_NOUVEL_APPAREIL);
 
         // On marque le code comme consommé
         $otpRecord->update(['est_utilise' => true]);

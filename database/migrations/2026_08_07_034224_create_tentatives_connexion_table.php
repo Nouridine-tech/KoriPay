@@ -17,6 +17,10 @@ return new class extends Migration
             // onDelete cascade : si le compte est supprimé, les tentatives le sont aussi
             $table->foreignId('user_id')->constrained('users')->onDelete('cascade');
 
+            // Type d'action concernée (login, verification_identite, reinitialisation_pin, nouvel_appareil)
+            // Permet d'avoir un compteur indépendant par route, pour un même utilisateur
+            $table->string('type_action');
+
             // Nombre de tentatives échouées consécutives
             $table->integer('tentatives')->default(0);
 

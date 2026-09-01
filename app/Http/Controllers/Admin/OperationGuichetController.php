@@ -26,7 +26,7 @@ class OperationGuichetController extends Controller
         path: "/admin/depot",
         operationId: "adminDepotFonds",
         summary: "Effectuer un dépôt de fonds sur le compte d'un client",
-        description: "Permet à un administrateur authentifié de créditer le compte d'un client depuis la console de guichet React. Génère une écriture comptable et transmet une facture par e-mail au bénéficiaire.",
+        description: "Permet à un administrateur ou un agent authentifié de créditer le compte d'un client depuis la console de guichet React. Génère une écriture comptable et transmet une facture par e-mail au bénéficiaire.",
         tags: ["Module Admin : Opérations Guichet"],
         security: [["sanctum" => []]],
         requestBody: new OA\RequestBody(
@@ -63,11 +63,11 @@ class OperationGuichetController extends Controller
             ),
             new OA\Response(
                 response: 403,
-                description: "Action non autorisée (L'utilisateur connecté n'est pas un administrateur)",
+                description: "Action non autorisée (l'utilisateur connecté n'est ni admin ni agent)",
                 content: new OA\JsonContent(
                     properties: [
                         new OA\Property(property: "statut", type: "string", example: "erreur"),
-                        new OA\Property(property: "message", type: "string", example: "Action non autorisée. Seul l'administrateur peut effectuer un dépôt.")
+                        new OA\Property(property: "message", type: "string", example: "Action non autorisée.")
                     ]
                 )
             ),
@@ -106,15 +106,7 @@ class OperationGuichetController extends Controller
 
     public function depot(Request $request)
     {
-        //1. Sécurité : On vérifie que l'utilisateur connecté est bien l'administrateur
-        if ($request->user()->role !== 'admin') {
-            return response()->json([
-                'statut' => 'erreur',
-                'message' => 'Action non autorisée. Seul l\'administrateur peut effectuer un dépôt.'
-            ], 403); // Code HTTP 403 : Interdit
-        }
-
-        //2. Validation des données saisies dans la console Réact
+        //1. Validation des données saisies dans la console Réact
         $validateur = Validator::make($request->all(), [
             'telephone' => ['required', 'string'],
             'montant' => ['required', 'numeric', 'min:100'],
@@ -127,7 +119,7 @@ class OperationGuichetController extends Controller
             ], 422); // Code HTTP 422 : Entité non traitée
         }
 
-        //3. Recherche du client bénéficiaire par son numéro de téléphone
+        //2. Recherche du client bénéficiaire par son numéro de téléphone
         $client = User::where('telephone', $request->telephone)->where('role', 'client')->first();
 
         if (!$client) {
@@ -143,7 +135,7 @@ class OperationGuichetController extends Controller
                 'message' => 'Impossible de créditer ce compte car il est actuellement suspendu.'
             ], 400); //Code  HTTP 400 : Requête incorrecte
         }
-        //4. Utilisateur d'une TRANSACTION DE BASE DE DONNEES( si l'envoi du mail plante, le solde du client n'est pas modifié (pas de fausse monnaie))
+        //3. Utilisateur d'une TRANSACTION DE BASE DE DONNEES( si l'envoi du mail plante, le solde du client n'est pas modifié (pas de fausse monnaie))
         DB::beginTransaction();
 
         try {
@@ -159,6 +151,7 @@ class OperationGuichetController extends Controller
                 'reference' => $referenceUnique,
                 'expediteur_id' => null,
                 'destinataire_id' => $client->id,
+                'effectue_par_id' => $request->user()->id,
                 'montant' => $request->montant,
                 'frais' => 0.00,
                 'type' => 'depot',
@@ -209,7 +202,7 @@ class OperationGuichetController extends Controller
         path: "/admin/retrait/initier",
         operationId: "adminInitierRetrait",
         summary: "Étape 1 : Initialiser un retrait au guichet",
-        description: "Permet à l'administrateur de guichet de lancer une demande de retrait pour un client. Un code OTP à 6 chiffres est généré et envoyé par e-mail au client.",
+        description: "Permet à un administrateur ou un agent de guichet de lancer une demande de retrait pour un client. Un code OTP à 6 chiffres est généré et envoyé par e-mail au client.",
         tags: ["Module Admin : Opérations Guichet"],
         security: [["sanctum" => []]],
         requestBody: new OA\RequestBody(
@@ -234,7 +227,7 @@ class OperationGuichetController extends Controller
                 )
             ),
             new OA\Response(response: 400, description: "Solde insuffisant pour effectuer le retrait"),
-            new OA\Response(response: 403, description: "Action non autorisée (Seul l'admin a accès)"),
+            new OA\Response(response: 403, description: "Action non autorisée (réservé aux admins et agents)"),
             new OA\Response(response: 404, description: "Aucun client trouvé avec ce numéro"),
             new OA\Response(response: 422, description: "Erreur de validation des données fournies")
         ]
@@ -242,15 +235,7 @@ class OperationGuichetController extends Controller
 
     public function initierRetrait(Request $request)
     {
-        // 1. Contrôle d'accés : Seul l'administrateur de guichet initier l'action
-        if ($request->user()->role !== 'admin') {
-            return response()->json([
-                'statut' => 'erreur',
-                'message' => 'Action non autorisée.'
-            ], 403); //Code HTTP 403 : Interdit
-        }
-
-        //2. Validation des champs d'entrée reçus du backoffice React
+        //1. Validation des champs d'entrée reçus du backoffice React
         $validateur = Validator::make($request->all(), [
             'telephone' => ['required', 'string'],
             'montant' => ['required', 'numeric', 'min:500'],
@@ -262,7 +247,7 @@ class OperationGuichetController extends Controller
             ], 422); //Code HTTP 422 :
         }
 
-        // 3. Recherche du client qui demande à faire un retrait
+        // 2. Recherche du client qui demande à faire un retrait
         $client = User::where('telephone', $request->telephone)->where('role', 'client')->first();
         if (!$client) {
             return response()->json([
@@ -271,7 +256,7 @@ class OperationGuichetController extends Controller
             ], 404); //Code HTTP 404 :
         }
 
-        // 4. Vérification si le solde disponible couvre le retrait
+        // 3. Vérification si le solde disponible couvre le retrait
         if ($client->solde < $request->montant) {
             return response()->json([
                 'statut' => 'erreur',
@@ -279,10 +264,10 @@ class OperationGuichetController extends Controller
             ], 400); // Code HTTP 400 : Requête erronée
         }
 
-        // 5. Génération d'un code OTP aléatoire à 6 chiffres avec random_int
+        // 4. Génération d'un code OTP aléatoire à 6 chiffres avec random_int
         $codeOtp = (string) random_int(100000, 999999);
 
-        // 6. Enregistrement du jeton dans la table 'verification_otps'
+        // 5. Enregistrement du jeton dans la table 'verification_otps'
         VerificationOtp::create([
             'user_id' => $client->id,
             'otp' => $codeOtp,
@@ -292,7 +277,7 @@ class OperationGuichetController extends Controller
             'est_utilise' => false,
         ]);
 
-        // 7. Expédition immédiate du code secret vers le mail du client
+        // 6. Expédition immédiate du code secret vers le mail du client
         $client->notify(new CodeOtpNotification($codeOtp, 'retrait'));
         return response()->json([
             'statut' => 'success',
@@ -308,7 +293,7 @@ class OperationGuichetController extends Controller
         path: "/admin/retrait/confirmer",
         operationId: "adminConfirmerRetrait",
         summary: "Étape 2 : Valider et décaisser le retrait",
-        description: "Vérifie le code OTP fourni par le client. Si valide et non expiré, débite le compte du client et enregistre la transaction comptable de retrait.",
+        description: "Vérifie le code OTP fourni par le client. Si valide et non expiré, débite le compte du client et enregistre la transaction comptable de retrait. Accessible aux administrateurs et aux agents de guichet.",
         tags: ["Module Admin : Opérations Guichet"],
         security: [["sanctum" => []]],
         requestBody: new OA\RequestBody(
@@ -335,7 +320,7 @@ class OperationGuichetController extends Controller
                 )
             ),
             new OA\Response(response: 400, description: "Code OTP incorrect, déjà consommé ou expiré / Solde insuffisant"),
-            new OA\Response(response: 403, description: "Action non autorisée"),
+            new OA\Response(response: 403, description: "Action non autorisée (réservé aux admins et agents)"),
             new OA\Response(response: 404, description: "Client introuvable"),
             new OA\Response(response: 422, description: "Erreur de validation"),
             new OA\Response(response: 500, description: "Défaillance technique lors du traitement de retrait")
@@ -344,14 +329,6 @@ class OperationGuichetController extends Controller
 
     public function confirmerRetrait(Request $request)
     {
-        // Contrôle d'accés admin initial
-        if ($request->user()->role !== 'admin') {
-            return response()->json([
-                'statut' => 'erreur',
-                'message' => 'Action non autorisée.'
-            ], 403); // Code HTTP 403 : Interdit
-        }
-
         // VAlidation du code OTP fourni de vive voix par le client
         $validateur = Validator::make($request->all(), [
             'telephone' => ['required', 'string'],
@@ -433,6 +410,7 @@ class OperationGuichetController extends Controller
                 'reference' => $referenceUnique,
                 'expediteur_id' => $client->id,
                 'destinataire_id' => null,
+                'effectue_par_id' => $request->user()->id,
                 'montant' => $request->montant,
                 'frais' => 0.00,
                 'type' => 'retrait',

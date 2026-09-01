@@ -8,11 +8,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class TentativeConnexion extends Model
 {
     //Spécifions le nom exact de la table
-    protected $table = 'tentative_connexion';
+    protected $table = 'tentatives_connexion';
 
     // Champs autorisés à être enregistrés
     protected $fillable = [
         'user_id',
+        'type_action',
         'tentatives',
         'derniere_tentative',
         'suspendu_jusqu_a',

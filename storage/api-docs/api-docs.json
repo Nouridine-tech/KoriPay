@@ -17,8 +17,8 @@
                 "tags": [
                     "Module Admin : Gestion Comptes"
                 ],
-                "summary": "Créer un nouveau compte administrateur",
-                "description": "Permet à un administrateur connecté de créer un nouveau compte admin. Seul un admin peut créer un autre admin.",
+                "summary": "Créer un nouveau compte administrateur ou agent",
+                "description": "Permet à un administrateur connecté de créer un nouveau compte admin ou agent. Seul un admin peut créer ce type de compte.",
                 "operationId": "adminCreerAdmin",
                 "requestBody": {
                     "required": true,
@@ -30,7 +30,8 @@
                                     "prenom",
                                     "telephone",
                                     "email",
-                                    "code_pin"
+                                    "code_pin",
+                                    "role"
                                 ],
                                 "properties": {
                                     "nom": {
@@ -52,6 +53,11 @@
                                     "code_pin": {
                                         "type": "string",
                                         "example": "4321"
+                                    },
+                                    "role": {
+                                        "description": "Doit être 'admin' ou 'agent'",
+                                        "type": "string",
+                                        "example": "agent"
                                     }
                                 },
                                 "type": "object"
@@ -61,7 +67,7 @@
                 },
                 "responses": {
                     "201": {
-                        "description": "Compte admin créé avec succès"
+                        "description": "Compte créé avec succès"
                     },
                     "403": {
                         "description": "Droits insuffisants"
@@ -77,17 +83,32 @@
                 ]
             }
         },
-        "/admin/clients": {
+        "/admin/comptes/{type}": {
             "get": {
                 "tags": [
-                    "Module Admin : Gestion Clients"
+                    "Module Admin : Gestion Comptes"
                 ],
-                "summary": "Lister tous les clients de la plateforme",
-                "description": "Retourne la liste complète de tous les comptes clients avec leurs informations et statuts.",
-                "operationId": "adminVoirTousLesClients",
+                "summary": "Lister tous les comptes d'un type donné (client ou agent)",
+                "description": "Retourne la liste complète des comptes clients OU des comptes agents, selon le type demandé dans l'URL.",
+                "operationId": "adminVoirTousLesComptes",
+                "parameters": [
+                    {
+                        "name": "type",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "client",
+                                "agent",
+                                "admin"
+                            ]
+                        }
+                    }
+                ],
                 "responses": {
                     "200": {
-                        "description": "Liste des clients retournée avec succès"
+                        "description": "Liste des comptes retournée avec succès"
                     },
                     "403": {
                         "description": "Droits insuffisants"
@@ -100,15 +121,28 @@
                 ]
             }
         },
-        "/admin/clients/{id}": {
+        "/admin/comptes/{type}/{id}": {
             "get": {
                 "tags": [
-                    "Module Admin : Gestion Clients"
+                    "Module Admin : Gestion Comptes"
                 ],
-                "summary": "Voir les informations détaillées d'un client",
-                "description": "Retourne toutes les informations d'un client spécifique, incluant son solde, ses points de fidélité et son historique de transactions.",
-                "operationId": "adminVoirUnClient",
+                "summary": "Voir les informations détaillées d'un compte (client ou agent)",
+                "description": "Retourne toutes les informations d'un compte spécifique du type demandé.",
+                "operationId": "adminVoirUnCompte",
                 "parameters": [
+                    {
+                        "name": "type",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "client",
+                                "agent",
+                                "admin"
+                            ]
+                        }
+                    },
                     {
                         "name": "id",
                         "in": "path",
@@ -121,13 +155,13 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "Informations client retournées"
+                        "description": "Informations du compte retournées"
                     },
                     "403": {
                         "description": "Droits insuffisants"
                     },
                     "404": {
-                        "description": "Client introuvable"
+                        "description": "Compte introuvable"
                     }
                 },
                 "security": [
@@ -160,15 +194,27 @@
                 ]
             }
         },
-        "/admin/clients/{id}/suspendre": {
+        "/admin/comptes/{type}/{id}/suspendre": {
             "put": {
                 "tags": [
-                    "Module Admin : Gestion Clients"
+                    "Module Admin : Gestion Comptes"
                 ],
-                "summary": "Suspendre le compte d'un client",
-                "description": "Bloque totalement l'accès au compte d'un client. Le client ne peut plus se connecter, envoyer ni recevoir d'argent.",
+                "summary": "Suspendre un compte (client ou agent)",
+                "description": "Bloque totalement l'accès au compte. Il ne peut plus se connecter ni effectuer aucune opération.",
                 "operationId": "adminSuspendreCompte",
                 "parameters": [
+                    {
+                        "name": "type",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "client",
+                                "agent"
+                            ]
+                        }
+                    },
                     {
                         "name": "id",
                         "in": "path",
@@ -206,7 +252,7 @@
                         "description": "Droits insuffisants"
                     },
                     "404": {
-                        "description": "Client introuvable"
+                        "description": "Compte introuvable"
                     },
                     "400": {
                         "description": "Compte déjà suspendu"
@@ -219,15 +265,27 @@
                 ]
             }
         },
-        "/admin/clients/{id}/geler": {
+        "/admin/comptes/{type}/{id}/geler": {
             "put": {
                 "tags": [
-                    "Module Admin : Gestion Clients"
+                    "Module Admin : Gestion Comptes"
                 ],
-                "summary": "Geler le compte d'un client",
-                "description": "Bloque uniquement les transferts sortants du compte. Le client peut toujours se connecter, voir son solde et recevoir de l'argent. Utilisé en cas de suspicion d'arnaque en cours.",
+                "summary": "Geler un compte (client ou agent)",
+                "description": "Bloque uniquement les transferts sortants du compte. Utilisé en cas de suspicion d'arnaque en cours.",
                 "operationId": "adminGelerCompte",
                 "parameters": [
+                    {
+                        "name": "type",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "client",
+                                "agent"
+                            ]
+                        }
+                    },
                     {
                         "name": "id",
                         "in": "path",
@@ -265,7 +323,7 @@
                         "description": "Droits insuffisants"
                     },
                     "404": {
-                        "description": "Client introuvable"
+                        "description": "Compte introuvable"
                     },
                     "400": {
                         "description": "Compte déjà gelé ou suspendu"
@@ -278,15 +336,27 @@
                 ]
             }
         },
-        "/admin/clients/{id}/reactiver": {
+        "/admin/comptes/{type}/{id}/reactiver": {
             "put": {
                 "tags": [
-                    "Module Admin : Gestion Clients"
+                    "Module Admin : Gestion Comptes"
                 ],
-                "summary": "Réactiver un compte client suspendu ou gelé",
-                "description": "Rétablit l'accès complet au compte d'un client après vérification et résolution du problème ayant motivé la suspension ou le gel.",
+                "summary": "Réactiver un compte suspendu ou gelé (client ou agent)",
+                "description": "Rétablit l'accès complet au compte après vérification et résolution du problème.",
                 "operationId": "adminReactiverCompte",
                 "parameters": [
+                    {
+                        "name": "type",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "client",
+                                "agent"
+                            ]
+                        }
+                    },
                     {
                         "name": "id",
                         "in": "path",
@@ -305,7 +375,7 @@
                         "description": "Droits insuffisants"
                     },
                     "404": {
-                        "description": "Client introuvable"
+                        "description": "Compte introuvable"
                     },
                     "400": {
                         "description": "Compte déjà actif"
@@ -438,7 +508,7 @@
                     "Module Admin : Opérations Guichet"
                 ],
                 "summary": "Effectuer un dépôt de fonds sur le compte d'un client",
-                "description": "Permet à un administrateur authentifié de créditer le compte d'un client depuis la console de guichet React. Génère une écriture comptable et transmet une facture par e-mail au bénéficiaire.",
+                "description": "Permet à un administrateur ou un agent authentifié de créditer le compte d'un client depuis la console de guichet React. Génère une écriture comptable et transmet une facture par e-mail au bénéficiaire.",
                 "operationId": "adminDepotFonds",
                 "requestBody": {
                     "required": true,
@@ -512,7 +582,7 @@
                         }
                     },
                     "403": {
-                        "description": "Action non autorisée (L'utilisateur connecté n'est pas un administrateur)",
+                        "description": "Action non autorisée (l'utilisateur connecté n'est ni admin ni agent)",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -523,7 +593,7 @@
                                         },
                                         "message": {
                                             "type": "string",
-                                            "example": "Action non autorisée. Seul l'administrateur peut effectuer un dépôt."
+                                            "example": "Action non autorisée."
                                         }
                                     },
                                     "type": "object"
@@ -604,7 +674,7 @@
                     "Module Admin : Opérations Guichet"
                 ],
                 "summary": "Étape 1 : Initialiser un retrait au guichet",
-                "description": "Permet à l'administrateur de guichet de lancer une demande de retrait pour un client. Un code OTP à 6 chiffres est généré et envoyé par e-mail au client.",
+                "description": "Permet à un administrateur ou un agent de guichet de lancer une demande de retrait pour un client. Un code OTP à 6 chiffres est généré et envoyé par e-mail au client.",
                 "operationId": "adminInitierRetrait",
                 "requestBody": {
                     "required": true,
@@ -657,7 +727,7 @@
                         "description": "Solde insuffisant pour effectuer le retrait"
                     },
                     "403": {
-                        "description": "Action non autorisée (Seul l'admin a accès)"
+                        "description": "Action non autorisée (réservé aux admins et agents)"
                     },
                     "404": {
                         "description": "Aucun client trouvé avec ce numéro"
@@ -679,7 +749,7 @@
                     "Module Admin : Opérations Guichet"
                 ],
                 "summary": "Étape 2 : Valider et décaisser le retrait",
-                "description": "Vérifie le code OTP fourni par le client. Si valide et non expiré, débite le compte du client et enregistre la transaction comptable de retrait.",
+                "description": "Vérifie le code OTP fourni par le client. Si valide et non expiré, débite le compte du client et enregistre la transaction comptable de retrait. Accessible aux administrateurs et aux agents de guichet.",
                 "operationId": "adminConfirmerRetrait",
                 "requestBody": {
                     "required": true,
@@ -739,7 +809,7 @@
                         "description": "Code OTP incorrect, déjà consommé ou expiré / Solde insuffisant"
                     },
                     "403": {
-                        "description": "Action non autorisée"
+                        "description": "Action non autorisée (réservé aux admins et agents)"
                     },
                     "404": {
                         "description": "Client introuvable"
@@ -1008,7 +1078,7 @@
                     "Authentification"
                 ],
                 "summary": "Liaison Étape 1 : Vérification croisée (KYC) et envoi de l'OTP de sécurité",
-                "description": "3. - ÉTAPE 1 : ENREGISTRER UN NOUVEL APPAREIL (Vérification identité globale + Envoi OTP)",
+                "description": "Vérifie le téléphone, l'email et le code PIN du client avant d'envoyer l'OTP. Utilise le même compteur anti-bruteforce que /login, car le PIN vérifié est le même secret.",
                 "operationId": "authNouvelAppareilInitier",
                 "requestBody": {
                     "required": true,
@@ -1044,7 +1114,13 @@
                         "description": "Données valides, OTP expédié par mail"
                     },
                     "401": {
-                        "description": "Informations d'identité invalides"
+                        "description": "Informations d'identité invalides - indique le nombre de tentatives restantes avant suspension"
+                    },
+                    "403": {
+                        "description": "Compte temporairement suspendu suite à 3 échecs consécutifs (compteur partagé avec /login)"
+                    },
+                    "422": {
+                        "description": "Erreur de validation"
                     }
                 }
             }
@@ -1055,7 +1131,7 @@
                     "Authentification"
                 ],
                 "summary": "Liaison Étape 2 : Valider le code OTP et lier l'appareil",
-                "description": "3. - ÉTAPE 2 : VALIDATION DE L'OTP + LIAISON ET CONNEXION FINALE",
+                "description": "Vérifie le code OTP reçu par e-mail et finalise la liaison de l'appareil. Après 3 échecs consécutifs, le compte est temporairement suspendu 30 minutes.",
                 "operationId": "authNouvelAppareilValider",
                 "requestBody": {
                     "required": true,
@@ -1095,7 +1171,16 @@
                         "description": "Appareil enregistré pour ce compte, token généré"
                     },
                     "401": {
-                        "description": "Code OTP invalide ou expiré"
+                        "description": "Code OTP invalide ou expiré - indique le nombre de tentatives restantes avant suspension"
+                    },
+                    "403": {
+                        "description": "Compte temporairement suspendu suite à 3 échecs consécutifs"
+                    },
+                    "404": {
+                        "description": "Utilisateur introuvable"
+                    },
+                    "422": {
+                        "description": "Erreur de validation"
                     }
                 }
             }
@@ -1146,7 +1231,7 @@
                     "Récupération de compte"
                 ],
                 "summary": "PIN oublié Étape 1 : Audit des habitudes financières",
-                "description": "Vérifie l'identité du client via ses habitudes de transactions et sa question secrète. Accessible uniquement depuis un appareil déjà enregistré. En cas de succès, retourne un ticket d'autorisation valide 5 minutes.",
+                "description": "Vérifie l'identité du client via ses habitudes de transactions et sa question secrète. Accessible uniquement depuis un appareil déjà enregistré. En cas de succès, retourne un ticket d'autorisation valide 5 minutes. Après 3 échecs consécutifs, le compte est temporairement suspendu 30 minutes.",
                 "operationId": "recuperationVerifierIdentite",
                 "requestBody": {
                     "required": true,
@@ -1195,10 +1280,19 @@
                         "description": "Identité confirmée, ticket d'autorisation généré"
                     },
                     "400": {
-                        "description": "Réponses incorrectes ou appareil non autorisé"
+                        "description": "Appareil non reconnu, ou informations complémentaires requises (contact fréquent ou question secrète manquante)"
+                    },
+                    "401": {
+                        "description": "Réponse incorrecte (montant, contact fréquent, ou réponse secrète) - indique le nombre de tentatives restantes avant suspension"
+                    },
+                    "403": {
+                        "description": "Compte temporairement suspendu suite à 3 échecs consécutifs"
                     },
                     "404": {
                         "description": "Compte introuvable"
+                    },
+                    "422": {
+                        "description": "Erreur de validation"
                     }
                 }
             }
@@ -1209,7 +1303,7 @@
                     "Récupération de compte"
                 ],
                 "summary": "PIN oublié Étape 2 : Réinitialiser le code PIN",
-                "description": "Applique le nouveau code PIN après validation du ticket d'autorisation obtenu à l'étape 1. Le ticket est à usage unique et expire dans 5 minutes.",
+                "description": "Applique le nouveau code PIN après validation du ticket d'autorisation obtenu à l'étape 1. Le ticket est à usage unique et expire dans 5 minutes. Après 3 échecs consécutifs, le compte est temporairement suspendu 30 minutes.",
                 "operationId": "recuperationReinitialiserPin",
                 "requestBody": {
                     "required": true,
@@ -1252,8 +1346,14 @@
                     "200": {
                         "description": "Code PIN réinitialisé avec succès"
                     },
-                    "400": {
-                        "description": "Ticket invalide ou expiré"
+                    "401": {
+                        "description": "Ticket invalide ou expiré - indique le nombre de tentatives restantes avant suspension"
+                    },
+                    "403": {
+                        "description": "Compte temporairement suspendu suite à 3 échecs consécutifs"
+                    },
+                    "404": {
+                        "description": "Compte introuvable"
                     },
                     "422": {
                         "description": "Erreur de validation"
@@ -2113,12 +2213,12 @@
             "description": "Module Admin : Gestion Comptes"
         },
         {
-            "name": "Module Admin : Gestion Clients",
-            "description": "Module Admin : Gestion Clients"
-        },
-        {
             "name": "Module Admin : Supervision",
             "description": "Module Admin : Supervision"
+        },
+        {
+            "name": "Module Admin : Gestion Clients",
+            "description": "Module Admin : Gestion Clients"
         },
         {
             "name": "Module Admin : Opérations Guichet",

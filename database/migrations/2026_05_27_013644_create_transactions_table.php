@@ -19,6 +19,10 @@ return new class extends Migration
             $table->foreignId('expediteur_id')->nullable()->constrained('users');
             $table->foreignId('destinataire_id')->nullable()->constrained('users');
 
+            // Identifie l'agent ou l'admin qui a exécuté l'opération de guichet (dépôt/retrait)
+            // Reste null pour les transferts/réceptions entre clients, où aucun tiers n'intervient
+            $table->foreignId('effectue_par_id')->nullable()->constrained('users');
+
             $table->decimal('montant', 15, 2);
             $table->decimal('frais', 10, 2)->default(0.00);
             $table->enum('type', ['transfert', 'reception', 'depot', 'retrait']);

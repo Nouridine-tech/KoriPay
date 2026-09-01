@@ -10,47 +10,56 @@ class CodeOtpNotification extends Notification
 {
     use Queueable;
 
-    // Propriétés pour stocker le code et le type d'action
+    // Propriété stockant le code OTP à afficher
     protected $codeOtp;
+
+    // Propriété stockant le type d'action concernée (retrait ou transfert)
     protected $typeAction;
 
-    // Le constructeur reçoit le code et optionnellement le type d'action (par défaut 'retrait')
+    // Constructeur recevant le code et le type d'action
     public function __construct($codeOtp, $typeAction = 'retrait')
     {
+        // Stocke le code OTP reçu
         $this->codeOtp = $codeOtp;
+
+        // Stocke le type d'action reçu, ou 'retrait' par défaut
         $this->typeAction = $typeAction;
     }
 
-    // On spécifie que le canal d'envoi exclusif est le mail
+    // Définit les canaux d'envoi de la notification
     public function via($notifiable): array
     {
+        // On envoie uniquement par e-mail
         return ['mail'];
     }
 
-    // Structuration du contenu de l'e-mail
+    // Construit le contenu de l'e-mail
     public function toMail($notifiable): MailMessage
     {
         // Si c'est un transfert, on affiche le texte spécifique au transfert
         if ($this->typeAction === 'transfert') {
+            // Cas d'un transfert dépassant le seuil de sécurité de 50 000 FCFA
             return (new MailMessage)
                 ->subject('KoriPay - Code de validation de votre transfert')
                 ->greeting("Bonjour {$notifiable->prenom},")
-                ->line("Une demande de transfert de fonds d'un gros montant a été initiée depuis votre application mobile KoriPay.")
+                ->line("Un transfert de fonds supérieur à 50 000 FCFA a été initié depuis votre application mobile KoriPay.")
                 ->line("Voici votre code de confirmation à usage unique :")
                 ->line("****{$this->codeOtp}****")
-                ->line("Ce code est strictement confidentiel et expirera dans 5 minutes.")
+                ->line("Ce code est strictement confidentiel : ne le communiquez à personne, y compris au support KoriPay.")
+                ->line("Il expirera dans 5 minutes.")
                 ->line("Si vous n'êtes pas à l'origine de cette demande, veuillez ignorer ce message.")
                 ->salutation("L'équipe KoriPay");
         }
 
-        // TEXTE D'ORIGINE POUR LE RETRAIT (STRICTEMENT INCHANGÉ)
+        // Cas d'un retrait d'espèces au guichet (texte par défaut)
         return (new MailMessage)
             ->subject('KoriPay - Code de validation de votre retrait')
             ->greeting("Bonjour {$notifiable->prenom},")
-            ->line("Une demande de retrait d'espèce a été initiée depuis votre compte KoriPay au niveau d'un guichet de retrait.")
+            ->line("Une demande de retrait d'espèces a été initiée depuis votre compte KoriPay au niveau d'un guichet de retrait.")
             ->line("Voici votre code de confirmation à usage unique :")
             ->line("****{$this->codeOtp}****")
-            ->line("Ce code est stritement confidentiel et expirera dans 5 minutes.")
+            ->line("Ce code est strictement confidentiel : ne le communiquez à personne, y compris au support KoriPay.")
+            ->line("Il expirera dans 5 minutes.")
             ->line("Si vous n'êtes pas à l'origine de cette demande, veuillez ignorer ce message.")
             ->salutation("L'équipe KoriPay");
     }

@@ -25,110 +25,105 @@ Route::post('/inscription', [AuthController::class, 'inscription']);
 Route::post('/auth/verifier-appareil', [AuthController::class, 'verifierEmpreinteAppareil']);
 
 // Route pour la connexion classique (Uniquement autorisée si l'appareil est déjà lié)
-Route::post('/login', [AuthController::class, 'login']);
+Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
 
 // Route pour répondre aux questions de réinitialisation du PIN
-Route::post('/recuperation/verifier-identite', [\App\Http\Controllers\Auth\RecuperationController::class, 'verifierIdentite']);
+Route::post('/recuperation/verifier-identite', [\App\Http\Controllers\Auth\RecuperationController::class, 'verifierIdentite'])->middleware('throttle:5,1');
 
 // Route pour réinitialiser le PIN
-Route::post('/recuperation/reinitialiser-pin', [\App\Http\Controllers\Auth\RecuperationController::class, 'reinitialiserPIN']);
+Route::post('/recuperation/reinitialiser-pin', [\App\Http\Controllers\Auth\RecuperationController::class, 'reinitialiserPIN'])->middleware('throttle:5,1');
 
 // FLUX SÉCURISÉ NOUVEL APPAREIL ÉTAPE 1 : Vérification d'identité KYC et envoi de l'OTP par e-mail
 Route::post('/login/nouvel-appareil/initier', [AuthController::class, 'initierNouvelAppareil']);
 
 // FLUX SÉCURISÉ NOUVEL APPAREIL ÉTAPE 2 : Validation de l'OTP, liaison définitive et ouverture de session
-Route::post('/login/nouvel-appareil/valider', [AuthController::class, 'validerNouvelAppareil']);
+Route::post('/login/nouvel-appareil/valider', [AuthController::class, 'validerNouvelAppareil'])->middleware('throttle:5,1');
 
 // ========================================================
 // ROUTES PROTEGEES (Nécessitent un Token Sanctum valide)
 // ========================================================
 Route::middleware('auth:sanctum')->group(function () {
-    // Route pour récupérer le profil de l'utilisateur connecté
+
+    // Route pour récupérer le profil de l'utilisateur connecté (peu importe son rôle)
     Route::get('/user', [\App\Http\Controllers\Client\ProfilController::class, 'voirProfil']);
 
-    /**
-     * OPERATIONS CLIENT
-     */
-    // Route pour les transferts d'argent entre clients (initier)
-    Route::post('/client/transfert/initier', [TransfertController::class, 'initierTransfert']);
-
-    // Route pour les transferts d'argent entre clients (confirmer)
-    Route::post('/client/transfert/confirmer', [TransfertController::class, 'confirmerTransfert']);
-
-    /**
-     * OPERATIONS GUICHET
-     */
-    // Routes pour les opérations de dépôt de l'administration
-    Route::post('/admin/depot', [\App\Http\Controllers\Admin\OperationGuichetController::class, 'depot']);
-
-    //Routes pour les opérations de retrait de l'administration (initiation)
-    Route::post('/admin/retrait/initier', [\App\Http\Controllers\Admin\OperationGuichetController::class, 'initierRetrait']);
-
-    //Routes pour les opérations de retrait de l'administration (confirmation)
-    Route::post('/admin/retrait/confirmer', [\App\Http\Controllers\Admin\OperationGuichetController::class, 'confirmerRetrait']);
-
-    /**
-     * OPERATION ADMIN : GESTION DES COMPTES
-     */
-    // Routes pour créer un nouveau compte administrateur
-    Route::post('/admin/creer-admin', [\App\Http\Controllers\Admin\AdminController::class, 'creerAdmin']);
-
-    // Route pour lister tous les clients de la plateforme
-    Route::get('/admin/client', [\App\Http\Controllers\Admin\AdminController::class, 'voirTousLesClients']);
-
-    // Route pour voir les détails complets d'un client spécifique
-    Route::get('/admin/clients/{id}', [\App\Http\Controllers\Admin\AdminController::class, 'voirUnClient']);
-
-    // Route pour suspendre totalement un compte client
-    Route::put('/admin/clients/{id}/suspendre', [\App\Http\Controllers\Admin\AdminController::class, 'suspendreCompte']);
-
-    // Route pour geler un compte client
-    Route::put('/admin/clients/{id}/geler', [\App\Http\Controllers\Admin\AdminController::class, 'gelerCompte']);
-
-    // // Route pour réactiver un compte client suspendu ou gelé
-    Route::put('admin/clients/{id}/réactiver', [\App\Http\Controllers\Admin\AdminController::class, 'reactiverCompte']);
-
-    // Routes pour modifier le profile d'un utilisateur en utilisant la methode KYC (Know Your Customer)
-    Route::put('/admin/client/modifier-identite', [\App\Http\Controllers\Admin\AdminController::class, 'modifierIdentiteClient']);
-
-    /**
-     * OPERATION ADMIN : SUPERVISION DES TRANSACTIONS
-     */
-    // Route pour voir l'historique global de toutes les transactions de la plateforme
-    Route::get('/admin/transactions', [\App\Http\Controllers\Admin\AdminController::class, 'voirToutesLesTransactions']);
-
-    // Route pour annuler une transaction dans un délai de 7 jours
-    Route::put('/admin/transactions/{reference}/annuler', [\App\Http\Controllers\Admin\AdminController::class, 'annulerTransaction']);
-
-    /**
-     * OPERATIONS TRANSACTIONS CLIENT
-     */
-    // Routes pour récupérer l'historique des transactions
-    Route::get('/client/transactions', [\App\Http\Controllers\Client\TransactionController::class, 'index']);
-
-    // Routes pour récupérer le détail d'une seule transaction
-    Route::get('/client/transactions/{reference}', [\App\Http\Controllers\Client\TransactionController::class, 'show']);
-
-    /**
-     * OPERATIONS FIDELITE CLIENT
-     */
-    // Routes pour les consultations des points de fidélité
-    Route::get('/client/fidelite/solde', [\App\Http\Controllers\Client\FideliteController::class, 'monSolde']);
-
-    // Route pour convertir les points accumulés en argent de compte
-    Route::post('/client/fidelite/convertir', [\App\Http\Controllers\Client\FideliteController::class, 'convertirPoints']);
-
-    /**
-     * OPERATIONS PROFIL CLIENT
-     */
-
-    // Route pour changer le code PIN
-    Route::post('/client/profil/changer-pin', [\App\Http\Controllers\Client\ProfilController::class, 'changerMdp']);
-
-    //Route pour configurer la question secrète du client connecté
-    Route::post('/client/profil/question-secrete', [\App\Http\Controllers\Client\ProfilController::class, 'configurerQuestionSecrete']);
-
-    // Route pour la déconnexion de l'utilisateur (Client ou Admin)
+    // Route pour la déconnexion de l'utilisateur (Client, Admin ou Agent)
     Route::post('/logout', [AuthController::class, 'logout']);
+
+    /**
+     * =====================================================
+     * ROUTES CLIENT (role:client uniquement)
+     * =====================================================
+     */
+    Route::middleware('role:client')->group(function () {
+
+        // --- Transferts ---
+        Route::post('/client/transfert/initier', [TransfertController::class, 'initierTransfert']);
+        Route::post('/client/transfert/confirmer', [TransfertController::class, 'confirmerTransfert']);
+
+        // --- Historique des transactions du client connecté ---
+        Route::get('/client/transactions', [\App\Http\Controllers\Client\TransactionController::class, 'index']);
+        Route::get('/client/transactions/{reference}', [\App\Http\Controllers\Client\TransactionController::class, 'show']);
+
+        // --- Fidélité ---
+        Route::get('/client/fidelite/solde', [\App\Http\Controllers\Client\FideliteController::class, 'monSolde']);
+        Route::post('/client/fidelite/convertir', [\App\Http\Controllers\Client\FideliteController::class, 'convertirPoints']);
+
+        // --- Profil ---
+        Route::post('/client/profil/changer-pin', [\App\Http\Controllers\Client\ProfilController::class, 'changerMdp']);
+        Route::post('/client/profil/question-secrete', [\App\Http\Controllers\Client\ProfilController::class, 'configurerQuestionSecrete']);
+    });
+
+    /**
+     * =====================================================
+     * OPERATIONS GUICHET (role:admin OU role:agent)
+     * =====================================================
+     */
+    Route::middleware('role:admin,agent')->group(function () {
+        //--- Depôt ---
+        Route::post('/admin/depot', [\App\Http\Controllers\Admin\OperationGuichetController::class, 'depot']);
+
+        //--- Retrait ---
+        Route::post('/admin/retrait/initier', [\App\Http\Controllers\Admin\OperationGuichetController::class, 'initierRetrait']);
+        Route::post('/admin/retrait/confirmer', [\App\Http\Controllers\Admin\OperationGuichetController::class, 'confirmerRetrait'])->middleware('throttle:5,1');
+    });
+
+    /**
+     * =====================================================
+     * GESTION DES COMPTES + SUPERVISION (role:admin uniquement)
+     * =====================================================
+     */
+    Route::middleware('role:admin')->group(function () {
+
+        // --- Creer un compte admin ---
+        Route::post('/admin/creer-admin', [\App\Http\Controllers\Admin\AdminController::class, 'creerAdmin']);
+
+        // --- Voir la liste des utilisateurs ---
+        Route::get('/admin/comptes/{type}', [\App\Http\Controllers\Admin\AdminController::class, 'voirTousLesComptes'])
+            ->where('type', 'client|agent|admin');
+
+        //--- Voir un compte en particulier ---
+        Route::get('/admin/comptes/{type}/{id}', [\App\Http\Controllers\Admin\AdminController::class, 'voirUnCompte'])
+            ->where('type', 'client|agent|admin');
+
+        //--- Suspendre un compte ---
+        Route::put('/admin/comptes/{type}/{id}/suspendre', [\App\Http\Controllers\Admin\AdminController::class, 'suspendreCompte'])
+            ->where('type', 'client|agent');
+
+        //--- Geler un client ---
+        Route::put('/admin/comptes/{type}/{id}/geler', [\App\Http\Controllers\Admin\AdminController::class, 'gelerCompte'])
+            ->where('type', 'client|agent');
+
+        //--- Réactiver un client ---
+        Route::put('admin/comptes/{type}/{id}/reactiver', [\App\Http\Controllers\Admin\AdminController::class, 'reactiverCompte'])
+            ->where('type', 'client|agent');
+
+        //--- Modifier les infos d'un client (KYC) ---
+        Route::put('/admin/client/modifier-identite', [\App\Http\Controllers\Admin\AdminController::class, 'modifierIdentiteClient']);
+
+        // --- Supervision des transactions ---
+        Route::get('/admin/transactions', [\App\Http\Controllers\Admin\AdminController::class, 'voirToutesLesTransactions']);
+        Route::put('/admin/transactions/{reference}/annuler', [\App\Http\Controllers\Admin\AdminController::class, 'annulerTransaction']);
+    });
 
 });

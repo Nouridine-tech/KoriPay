@@ -11,9 +11,11 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 use OpenApi\Attributes as OA;
 use Carbon\Carbon;
+use App\Traits\GereTentativesConnexion;
 
 class RecuperationController extends Controller
 {
+    use GereTentativesConnexion;
     /**
      * ETAPE 1 : AUDIT DE SECURITE (Questions sur les transactions + Question secrète)
      * Cette route est EXCLUSIVEMENT accessible depuis un appareil déjà connu.
@@ -32,7 +34,7 @@ class RecuperationController extends Controller
         path: "/recuperation/verifier-identite",
         operationId: "recuperationVerifierIdentite",
         summary: "PIN oublié Étape 1 : Audit des habitudes financières",
-        description: "Vérifie l'identité du client via ses habitudes de transactions et sa question secrète. Accessible uniquement depuis un appareil déjà enregistré. En cas de succès, retourne un ticket d'autorisation valide 5 minutes.",
+        description: "Vérifie l'identité du client via ses habitudes de transactions et sa question secrète. Accessible uniquement depuis un appareil déjà enregistré. En cas de succès, retourne un ticket d'autorisation valide 5 minutes. Après 3 échecs consécutifs, le compte est temporairement suspendu 30 minutes.",
         tags: ["Récupération de compte"],
         requestBody: new OA\RequestBody(
             required: true,
@@ -49,8 +51,11 @@ class RecuperationController extends Controller
         ),
         responses: [
             new OA\Response(response: 200, description: "Identité confirmée, ticket d'autorisation généré"),
-            new OA\Response(response: 400, description: "Réponses incorrectes ou appareil non autorisé"),
-            new OA\Response(response: 404, description: "Compte introuvable")
+            new OA\Response(response: 400, description: "Appareil non reconnu, ou informations complémentaires requises (contact fréquent ou question secrète manquante)"),
+            new OA\Response(response: 401, description: "Réponse incorrecte (montant, contact fréquent, ou réponse secrète) - indique le nombre de tentatives restantes avant suspension"),
+            new OA\Response(response: 403, description: "Compte temporairement suspendu suite à 3 échecs consécutifs"),
+            new OA\Response(response: 404, description: "Compte introuvable"),
+            new OA\Response(response: 422, description: "Erreur de validation")
         ]
     )]
 
@@ -79,6 +84,12 @@ class RecuperationController extends Controller
             ], 404); // Code HTTP 404 : Not found
         }
 
+        //Vérification de la suspension temporaire automatique suite à des échecs
+        $reponseSuspension = $this->verifierSuspension($user, self::ACTION_VERIFICATION_IDENTITE);
+        if ($reponseSuspension){
+            return $reponseSuspension;
+        }
+
         // 3. SECURITE CRITIQUE : L'appareil doit absolument être connu
         $appareilConnu = $user->devices()->where('device_id', $request->device_id)->exists();
         if (!$appareilConnu) {
@@ -97,13 +108,10 @@ class RecuperationController extends Controller
 
         // Si le client n'a aucune transaction ou si le montant ne correspond pas -> refus
         if (!$derniereTx || (float)$derniereTx->montant !== (float)$request->montant_derniere_tx) {
-            return response()->json([
-                'statut' => 'erreur',
-                'message' => 'Le montant de votre dernière opération est incorrecte.'
-            ], 400); // Code HTTP 400 : Accès refusé
+            return $this->enregistrerEchec($user,self::ACTION_VERIFICATION_IDENTITE, 'Le montant de votre dernière opération est incorrecte.');
         }
 
-        // 5. NIVEAU 1 — Vérification du contact le plus fréquent
+        // 5. NIVEAU 2 — Vérification du contact le plus fréquent
         // On cherche le contact avec qui l'utilisateur a le plus de transactions (envoi ET réception)
         // Le CASE WHEN permet d'identifier l'autre personne dans les deux cas :
         // - Si l'utilisateur est expéditeur → le contact est le destinataire
@@ -146,14 +154,11 @@ class RecuperationController extends Controller
             $reponseClient    = strtolower($request->contact_frequent ?? '');
 
             if ($reponseClient !== $telephoneContact && $reponseClient !== $nomContact && $reponseClient !== $prenomContact) {
-                return response()->json([
-                    'statut'  => 'erreur',
-                    'message' => 'Le contact avec lequel vous avez le plus de transactions est incorrect.'
-                ], 400); // Code HTTP 400 : Accès refusé
+                return $this->enregistrerEchec($user, self::ACTION_VERIFICATION_IDENTITE, 'Le contact avec lequel vous avez le plus de transactions est incorrect.');
             }
         }
 
-        // 6. NIVEAU 2 : Question secrète (uniquement si le client l'a configurée)
+        // 6. NIVEAU 3 : Question secrète (uniquement si le client l'a configurée)
         if (!empty($user->question_secrete)) {
             // Si la question secrète est configurée mais que le client n'a rien envoyé
             if (!$request->filled('response_secrete')) {
@@ -166,12 +171,12 @@ class RecuperationController extends Controller
 
             // Vérification de la réponse (insensible à la casse grâce strtolower)
             if (!Hash::check(strtolower($request->response_secrete), $user->response_secrete)) {
-                return response()->json([
-                    'statut' => 'erreur',
-                    'message' => 'La réponse à votre question secrète est incorrecte.'
-                ], 400); // Code HTTP 400 : Accès refusé
+                return $this->enregistrerEchec($user, self::ACTION_VERIFICATION_IDENTITE, 'La réponse à votre question secrète est incorrecte.');
             }
         }
+
+        // Toutes les vérifications sont passées -> réinitialisation du compteur de tentatives
+        $this->reinitialiserTentatives($user, self::ACTION_VERIFICATION_IDENTITE);
 
         // 7. Toutes les vérifications sont passées -> Génération du ticket d'autorisation
         // Ce ticket est un OTP temporaire qui autorise uniquement la réinitialisation du PIN
@@ -200,7 +205,7 @@ class RecuperationController extends Controller
         path: "/recuperation/reinitialiser-pin",
         operationId: "recuperationReinitialiserPin",
         summary: "PIN oublié Étape 2 : Réinitialiser le code PIN",
-        description: "Applique le nouveau code PIN après validation du ticket d'autorisation obtenu à l'étape 1. Le ticket est à usage unique et expire dans 5 minutes.",
+        description: "Applique le nouveau code PIN après validation du ticket d'autorisation obtenu à l'étape 1. Le ticket est à usage unique et expire dans 5 minutes. Après 3 échecs consécutifs, le compte est temporairement suspendu 30 minutes.",
         tags: ["Récupération de compte"],
         requestBody: new OA\RequestBody(
             required: true,
@@ -216,7 +221,9 @@ class RecuperationController extends Controller
         ),
         responses: [
             new OA\Response(response: 200, description: "Code PIN réinitialisé avec succès"),
-            new OA\Response(response: 400, description: "Ticket invalide ou expiré"),
+            new OA\Response(response: 401, description: "Ticket invalide ou expiré - indique le nombre de tentatives restantes avant suspension"),
+            new OA\Response(response: 403, description: "Compte temporairement suspendu suite à 3 échecs consécutifs"),
+            new OA\Response(response: 404, description: "Compte introuvable"),
             new OA\Response(response: 422, description: "Erreur de validation")
         ]
     )]
@@ -245,7 +252,13 @@ class RecuperationController extends Controller
             ], 404); // Code HTTP 404 : Not found
         }
 
-        // 3. Vérification du ticket d'autorisation en base de données
+        // 3. Vérification si le compte n'a pas été déjà suspendu pour plusieurs tentatives échouées
+        $reponseSuspension = $this->verifierSuspension($user, self::ACTION_REINITIALISATION_PIN);
+        if ($reponseSuspension) {
+            return $reponseSuspension;
+        }
+
+        // 4. Vérification du ticket d'autorisation en base de données
         $ticket = VerificationOtp::where('user_id', $user->id)
             ->where('otp', $request->ticket)
             ->where('type_action', 'autorisation_changement_pin')
@@ -254,16 +267,16 @@ class RecuperationController extends Controller
             ->first();
 
         if (!$ticket || $ticket->expire_a->isPast()) {
-            return response()->json([
-                'statut' => 'erreur',
-                'message' => 'Le ticket d\'autorisation est invalide ou a expiré. Veuillez recommencer depuis l\'étape 1.'
-            ], 400); // Code HTTP 400 : Accès refusé
+            return $this->enregistrerEchec($user, self::ACTION_REINITIALISATION_PIN, 'Le ticket d\'autorisation est invalide ou a expiré. Veuillez recommencer depuis l\'étape 1.');
         }
 
-        // 4. Consommation immédiate du ticket pour empêcher toute réutilisation
+        // 5. Consommation immédiate du ticket pour empêcher toute réutilisation
         $ticket->update(['est_utilise' => true]);
 
-        // 5. Mise à jour sécurisée du code PIN (haché en base de données)
+        // 6. Toutes les vérifications sont passées -> réinitialisation du compteur de tentatives
+        $this->reinitialiserTentatives($user, self::ACTION_REINITIALISATION_PIN);
+
+        // 7. Mise à jour sécurisée du code PIN (haché en base de données)
         $user->update([
             'code_pin' => Hash::make($request->nouveau_pin)
         ]);
